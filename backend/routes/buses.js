@@ -1,12 +1,58 @@
 const express        = require('express');
 const router         = express.Router();
 const Bus            = require('../models/Bus');
+const Route          = require('../models/Route');
 const authMiddleware = require('../middleware/auth');
 const protect        = authMiddleware.protect;
 const authorizeRole  = authMiddleware.authorizeRole;
 
 function normalizeName(value = '') {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeStop(value = '') {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').replace(' stop', '');
+}
+
+function normalizeRouteCode(value = '') {
+  return value.trim().toUpperCase().replace(/^RT-/, '');
+}
+
+async function calculateBusEta(busLike) {
+  const status = busLike.status || 'On Route';
+  if (status === 'Off Duty') return '—';
+
+  const routeCode = normalizeRouteCode(busLike.route || '');
+  let routeDoc = null;
+  if (routeCode) {
+    routeDoc = await Route.findOne({
+      $or: [
+        { routeId: `RT-${routeCode}` },
+        { routeId: routeCode },
+        { name: new RegExp(routeCode, 'i') }
+      ]
+    });
+  }
+
+  const stops = routeDoc?.stops || [];
+  const currentStop = busLike.currentStop || '';
+  const normalizedCurrent = normalizeStop(currentStop);
+  const currentIndex = stops.findIndex((stop) => normalizeStop(stop.name) === normalizedCurrent);
+
+  const remainingStops = currentIndex >= 0
+    ? Math.max(0, stops.length - currentIndex - 1)
+    : Math.max(1, stops.length || 3);
+
+  const baseMinutes = Math.max(2, remainingStops * 3);
+  const passengers = Number(busLike.passengers || 0);
+  const capacity = Number(busLike.capacity || 50);
+  const occupancy = capacity > 0 ? passengers / capacity : 0;
+
+  const occupancyPenalty = occupancy > 0.85 ? 3 : occupancy > 0.65 ? 2 : occupancy > 0.45 ? 1 : 0;
+  const statusPenalty = status === 'Delayed' ? 5 : status === 'At Stop' ? 1 : 0;
+
+  const etaMinutes = Math.min(45, Math.max(2, Math.round(baseMinutes + occupancyPenalty + statusPenalty)));
+  return `${etaMinutes} min`;
 }
 
 // ── GET ALL BUSES (Passenger and Admin can see) ──
@@ -94,6 +140,7 @@ router.post('/', protect, authorizeRole('admin'), async (req, res) => {
       driver,
       capacity: capacity || 50
     });
+    newBus.eta = await calculateBusEta(newBus);
 
     await newBus.save();
 
@@ -113,15 +160,19 @@ router.post('/', protect, authorizeRole('admin'), async (req, res) => {
 // ── UPDATE BUS (Admin only) ──
 router.put('/:id', protect, authorizeRole('admin'), async (req, res) => {
   try {
-    const bus = await Bus.findOneAndUpdate(
-      { busId: req.params.id },
-      req.body,
-      { new: true }
-    );
-
-    if (!bus) {
+    const existingBus = await Bus.findOne({ busId: req.params.id });
+    if (!existingBus) {
       return res.status(404).json({ message: 'Bus not found' });
     }
+
+    const merged = { ...existingBus.toObject(), ...req.body };
+    const eta = await calculateBusEta(merged);
+
+    const bus = await Bus.findOneAndUpdate(
+      { busId: req.params.id },
+      { ...req.body, eta },
+      { new: true }
+    );
 
     res.status(200).json({
       message: 'Bus updated successfully',
@@ -148,15 +199,19 @@ router.patch('/:id/location', protect, authorizeRole('driver'), async (req, res)
     if (typeof latitude === 'number') updates.latitude = latitude;
     if (typeof longitude === 'number') updates.longitude = longitude;
 
+    const existingBus = await Bus.findOne({ busId: req.params.id });
+    if (!existingBus) {
+      return res.status(404).json({ message: 'Bus not found' });
+    }
+
+    const merged = { ...existingBus.toObject(), ...updates };
+    updates.eta = await calculateBusEta(merged);
+
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
       updates,
       { new: true }
     );
-
-    if (!bus) {
-      return res.status(404).json({ message: 'Bus not found' });
-    }
 
     res.status(200).json({
       message: 'Bus location updated successfully',

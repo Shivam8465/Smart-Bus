@@ -201,7 +201,7 @@
         <div class="input-row mb-16">
           <div class="form-group">
             <label class="form-label">Current Stop</label>
-            <select class="form-select">
+            <select class="form-select" id="current-stop-select">
               <option>Park Avenue Stop</option>
               <option>Main Street</option>
               <option>Central Station</option>
@@ -211,7 +211,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Status</label>
-            <select class="form-select">
+            <select class="form-select" id="status-select">
               <option>On Route</option>
               <option>At Stop</option>
               <option>Delayed</option>
@@ -263,11 +263,11 @@
       <div class="card-header">
         <div class="flex items-center gap-12">
           <div class="card-icon icon-blue">🗺️</div>
-          <h3>Route 42A — Stop Timeline</h3>
+          <h3 id="route-timeline-title">Route 42A — Stop Timeline</h3>
         </div>
-        <span class="route-tag">42A · 12 stops</span>
+        <span class="route-tag" id="route-timeline-tag">42A · 9 stops</span>
       </div>
-      <div class="stop-timeline">
+      <div class="stop-timeline" id="route-timeline">
         <div class="stop-item done">
           <span class="stop-name-t">City Centre Depot</span>
           <span class="stop-time">06:00 ✓</span>
@@ -365,6 +365,7 @@ function changeCount(delta) {
 // ── LOAD DRIVER BUS FROM MONGODB ──
 let driverBusId = null;
 let currentBusCapacity = busCapacity;
+let currentRouteStops = [];
 
 function updatePassengerVisuals() {
   const pct = (paxCount / currentBusCapacity) * 100;
@@ -390,23 +391,88 @@ function updatePassengerVisuals() {
 }
 
 function updateStopTimeline(currentStop) {
-  if (!currentStop) return;
-  const stopItems = Array.from(document.querySelectorAll('.stop-timeline .stop-item'));
-  const stopNames = stopItems.map(item =>
-    item.querySelector('.stop-name-t')?.textContent?.trim() || ''
+  if (!currentRouteStops.length) return;
+  renderRouteTimeline(currentRouteStops, currentStop);
+}
+
+function normalizeStopName(name) {
+  return (name || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(' stop', '')
+    .trim();
+}
+
+function renderRouteTimeline(stops, currentStop) {
+  const timeline = document.getElementById('route-timeline');
+  if (!timeline || !stops.length) return;
+
+  const normalizedCurrent = normalizeStopName(currentStop);
+  let currentIndex = stops.findIndex((stop) =>
+    normalizeStopName(stop.name) === normalizedCurrent
   );
 
-  const matchedIndex = stopNames.findIndex(name =>
-    name.toLowerCase() === currentStop.toLowerCase()
-  );
+  if (currentIndex < 0) {
+    currentIndex = stops.findIndex((stop) => {
+      const normalized = normalizeStopName(stop.name);
+      return normalized.includes(normalizedCurrent) || normalizedCurrent.includes(normalized);
+    });
+  }
 
-  if (matchedIndex < 0) return;
+  timeline.innerHTML = stops.map((stop, index) => {
+    const statusClass = index < currentIndex ? 'done' : index === currentIndex ? 'current' : '';
+    const etaLabel = index < currentIndex ? '✓' : index === currentIndex ? '~now' : `+${(index - Math.max(0, currentIndex)) * 3}m`;
+    return `
+      <div class="stop-item ${statusClass}">
+        <span class="stop-name-t">${stop.name}</span>
+        <span class="stop-time">${etaLabel}</span>
+      </div>`;
+  }).join('');
+}
 
-  stopItems.forEach((item, index) => {
-    item.classList.remove('done', 'current');
-    if (index < matchedIndex) item.classList.add('done');
-    if (index === matchedIndex) item.classList.add('current');
-  });
+function populateStopDropdown(stops, currentStop) {
+  const stopSelect = document.getElementById('current-stop-select');
+  if (!stopSelect) return;
+  stopSelect.innerHTML = stops.map((stop) => `<option value="${stop.name}">${stop.name}</option>`).join('');
+  if (currentStop) {
+    const match = stops.find((stop) => normalizeStopName(stop.name) === normalizeStopName(currentStop));
+    if (match) stopSelect.value = match.name;
+  }
+}
+
+async function loadRouteDetails(routeCode, currentStop) {
+  if (!routeCode) return;
+  try {
+    const token = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/routes`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Routes load failed');
+
+    const normalizedRoute = routeCode.toUpperCase().replace(/^RT-/, '');
+    const route = (data.routes || []).find((r) => {
+      const rid = (r.routeId || '').toUpperCase().replace(/^RT-/, '');
+      return rid === normalizedRoute;
+    });
+
+    if (!route || !route.stops || !route.stops.length) return;
+    currentRouteStops = [...route.stops].sort((a, b) => (a.position || 0) - (b.position || 0));
+
+    const titleEl = document.getElementById('route-timeline-title');
+    const tagEl = document.getElementById('route-timeline-tag');
+    if (titleEl) titleEl.textContent = `Route ${normalizedRoute} — Stop Timeline`;
+    if (tagEl) tagEl.textContent = `${normalizedRoute} · ${currentRouteStops.length} stops`;
+
+    populateStopDropdown(currentRouteStops, currentStop);
+    renderRouteTimeline(currentRouteStops, currentStop || currentRouteStops[0].name);
+  } catch (error) {
+    // Keep existing static timeline as fallback
+  }
 }
 
 async function loadDriverBus() {
@@ -437,6 +503,7 @@ async function loadDriverBus() {
       // Update trip status card
       const routeEl = document.querySelector('.big-route-tag');
       if (routeEl) routeEl.textContent = driverBus.route;
+      await loadRouteDetails(driverBus.route, driverBus.currentStop);
 
       const busIdEl = document.querySelector('.font-mono.text-amber');
       if (busIdEl) busIdEl.textContent = driverBus.busId;
@@ -445,7 +512,7 @@ async function loadDriverBus() {
       if (statusEl) statusEl.textContent = driverBus.status.toUpperCase();
 
       if (driverBus.currentStop) {
-        const stopSelect = document.querySelector('#location select');
+        const stopSelect = document.getElementById('current-stop-select');
         if (stopSelect) stopSelect.value = driverBus.currentStop;
         updateStopTimeline(driverBus.currentStop);
       }
@@ -463,8 +530,10 @@ async function loadDriverBus() {
 
 // ── UPDATE LOCATION TO MONGODB ──
 async function handleLocationUpdate() {
-  const stop   = document.querySelector('#location select').value;
-  const status = document.querySelectorAll('#location select')[1]?.value || 'On Route';
+  const stopEl = document.getElementById('current-stop-select');
+  const statusEl = document.getElementById('status-select');
+  const stop = stopEl?.value || '';
+  const status = statusEl?.value || 'On Route';
 
   if (!driverBusId) {
     alert('No bus assigned to you yet. Contact admin.');

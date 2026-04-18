@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SmartBus — Predictions</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/config.js"></script>
   <style>
     .prediction-hero {
       background: linear-gradient(135deg, rgba(0,212,180,0.06), rgba(245,166,35,0.04));
@@ -476,19 +477,67 @@ function runPrediction() {
     renderResults(results);
   }
 }
- // Initial render using regression
-const routeDefaultTimes = {
-  '42A': 'morning',
-  '17B': 'morning',
-  '08C': 'evening',
-  '25D': 'midday',
-  '33E': 'night'
-};
-const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
-const initialResults = allRoutes.map(r =>
-  predictWithRegression(r, routeDefaultTimes[r], null)
-);
-renderResults(initialResults);
+function parseEtaMinutes(etaText) {
+  if (!etaText || etaText === '—') return null;
+  const match = String(etaText).match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
+async function loadLivePredictions() {
+  const token = localStorage.getItem('sbf_token');
+  if (!token) {
+    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
+    const initialResults = allRoutes.map((r) => predictWithRegression(r, 'now', null));
+    renderResults(initialResults);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/buses`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Buses load failed');
+
+    const buses = (data.buses || []).filter((bus) => bus.status !== 'Off Duty');
+    const liveResults = buses.map((bus) => {
+      const occupancyPct = Math.min(100, Math.max(0, Math.round((bus.passengers / (bus.capacity || 50)) * 100)));
+      const crowdLevel = occupancyPct > 75 ? 'high' : occupancyPct > 45 ? 'medium' : 'low';
+      const etaMinutes = parseEtaMinutes(bus.eta);
+      const fallback = predictWithRegression(bus.route, 'now', bus.currentStop || null);
+      const arrivalTime = etaMinutes || fallback.arrivalTime;
+      const confidence = bus.status === 'Delayed' ? 76 : 88;
+
+      return {
+        route: bus.route,
+        routeName: `Route ${bus.route}`,
+        stopName: bus.currentStop || 'Route in progress',
+        arrivalTime,
+        crowdPercentage: occupancyPct,
+        crowdLevel,
+        confidence,
+        factors: [
+          `Live bus: ${bus.busId}`,
+          `Passengers: ${bus.passengers}/${bus.capacity || 50}`,
+          `Status: ${bus.status}`,
+          `ETA source: ${etaMinutes ? 'backend' : 'regression fallback'}`
+        ]
+      };
+    });
+
+    renderResults(liveResults);
+  } catch (error) {
+    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
+    const initialResults = allRoutes.map((r) => predictWithRegression(r, 'now', null));
+    renderResults(initialResults);
+  }
+}
+
+loadLivePredictions();
 
   // Ticker scroll
   const tickerMessages = [
