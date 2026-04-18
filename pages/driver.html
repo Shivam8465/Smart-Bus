@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartBus — Driver Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .map-placeholder { height: 260px; }
+    .trip-status-card {
+      background: linear-gradient(135deg, rgba(0,212,180,0.08), rgba(0,212,180,0.03));
+      border: 1px solid rgba(0,212,180,0.25);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .trip-status-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .big-route-tag {
+      font-family: var(--font-mono);
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: var(--teal);
+    }
+    .stop-timeline {
+      position: relative;
+      padding-left: 24px;
+    }
+    .stop-timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px; top: 8px; bottom: 8px;
+      width: 2px;
+      background: var(--border);
+    }
+    .stop-item {
+      position: relative;
+      padding: 8px 0 8px 16px;
+      font-size: 0.87rem;
+    }
+    .stop-item::before {
+      content: '';
+      position: absolute;
+      left: -2px; top: 50%;
+      transform: translateY(-50%);
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--bg-card);
+    }
+    .stop-item.done::before  { background: var(--teal); border-color: var(--teal); }
+    .stop-item.current::before { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 8px var(--amber); width: 14px; height: 14px; left: -4px; }
+    .stop-item.done   .stop-name-t { color: var(--text-muted); text-decoration: line-through; }
+    .stop-item.current .stop-name-t { color: var(--amber); font-weight: 600; }
+    .stop-name-t { color: var(--text-secondary); }
+    .stop-time { float: right; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .counter-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .counter-btn {
+      width: 36px; height: 36px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: grid; place-items: center;
+      transition: all 0.2s;
+    }
+    .counter-btn:hover { background: var(--amber-glow); border-color: var(--amber); color: var(--amber); }
+    .counter-display {
+      font-family: var(--font-mono);
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 50px;
+      text-align: center;
+    }
+    .incident-btn {
+      background: var(--red-glow);
+      border: 1px solid rgba(255,71,87,0.3);
+      color: var(--red);
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .incident-btn:hover { background: var(--red); color: #fff; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="brand-icon">🚍</div>
+    Smart<span class="accent">Bus</span>&nbsp;Forecast
+  </div>
+  <ul class="nav-links">
+    <li><a href="../index.html">Home</a></li>
+    <li><a href="prediction.html">Predictions</a></li>
+    <li><a href="passenger.html">Passenger</a></li>
+    <li><a href="driver.html" class="active">Driver</a></li>
+    <li><a href="admin.html">Admin</a></li>
+  </ul>
+  <div class="nav-actions">
+    <span class="badge badge-green">Driver</span>
+    <button class="btn-ghost" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="page-wrapper">
+<div class="dashboard-container">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <p class="sidebar-title">Navigation</p>
+      <ul class="sidebar-menu">
+        <li><a href="#trip"      class="active"><span class="menu-icon">🚌</span> Active Trip</a></li>
+        <li><a href="#location"> <span class="menu-icon">📍</span> Update Location</a></li>
+        <li><a href="#passengers"><span class="menu-icon">👥</span> Passenger Count</a></li>
+        <li><a href="#route">    <span class="menu-icon">🗺️</span> Route Details</a></li>
+        <li><a href="#log">      <span class="menu-icon">📋</span> Trip Log</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-section">
+      <p class="sidebar-title">Driver Info</p>
+      <ul class="sidebar-menu">
+        <li><a href="#"><span class="menu-icon">👤</span> R. Kumar</a></li>
+        <li><a href="#"><span class="menu-icon">🎫</span> ID: DRV-042</a></li>
+        <li><a href="#"><span class="menu-icon">📅</span> Shift: 06:00–14:00</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="dashboard-content">
+    <div class="page-header fade-in">
+      <h2>Driver Dashboard</h2>
+      <div class="breadcrumb">Home / <span>Driver</span></div>
+    </div>
+
+    <!-- ── ACTIVE TRIP STATUS ── -->
+    <section id="trip" class="trip-status-card fade-in">
+      <div class="trip-status-top">
+        <div>
+          <div class="text-xs font-mono text-muted mb-8">ACTIVE ROUTE</div>
+          <div class="big-route-tag">42A</div>
+          <div class="text-secondary" style="font-size:0.9rem;margin-top:4px;">City Centre → Airport Terminal</div>
+        </div>
+        <div style="text-align:right">
+          <div class="text-xs font-mono text-muted mb-8">BUS ID</div>
+          <div class="font-mono text-amber" style="font-size:1.4rem;font-weight:700;">BUS-001</div>
+          <div class="mt-8"><span class="badge badge-green">On Route</span></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="text-xs font-mono text-muted mb-8">NEXT STOP</div>
+          <div style="color:var(--text-primary);font-weight:600;">Park Avenue Stop</div>
+          <div class="text-xs font-mono text-muted mt-4">ETA: ~3 min</div>
+        </div>
+        <div>
+          <div class="text-xs font-mono text-muted mb-8">TRIP PROGRESS</div>
+          <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:42%;background:var(--teal);border-radius:4px;"></div>
+          </div>
+          <div class="text-xs font-mono text-muted mt-4">Stop 5 of 12</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── GRID: LOCATION UPDATE + PASSENGERS ── -->
+    <div class="grid-2 mb-24">
+
+      <!-- Update Location -->
+      <section id="location" class="card fade-in-d1">
+        <div class="card-header">
+          <div class="flex items-center gap-12">
+            <div class="card-icon icon-teal">📍</div>
+            <h3>Update Location</h3>
+          </div>
+        </div>
+        <div class="map-placeholder mb-16">
+          <div class="map-dot"></div>
+          <span class="map-label">Current: Park Avenue Area</span>
+          <span class="text-xs text-muted">12.9716°N, 77.5946°E</span>
+        </div>
+        <div class="input-row mb-16">
+          <div class="form-group">
+            <label class="form-label">Current Stop</label>
+            <select class="form-select">
+              <option>Park Avenue Stop</option>
+              <option>Main Street</option>
+              <option>Central Station</option>
+              <option>Tech Park</option>
+              <option>Airport Gate A</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-select">
+              <option>On Route</option>
+              <option>At Stop</option>
+              <option>Delayed</option>
+              <option>Break</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-teal w-full" onclick="handleLocationUpdate()">📍 Broadcast Location</button>
+      </section>
+
+      <!-- Passenger Count -->
+      <section id="passengers" class="card fade-in-d2">
+        <div class="card-header">
+          <div class="flex items-center gap-12">
+            <div class="card-icon icon-amber">👥</div>
+            <h3>Passenger Count</h3>
+          </div>
+          <span class="badge badge-amber">MEDIUM</span>
+        </div>
+        <div style="text-align:center;padding:24px 0;">
+          <div class="text-xs font-mono text-muted mb-16">CURRENT OCCUPANCY</div>
+          <div class="counter-control" style="justify-content:center;">
+            <button class="counter-btn" onclick="changeCount(-1)">−</button>
+            <div class="counter-display" id="pax-count">34</div>
+            <button class="counter-btn" onclick="changeCount(1)">+</button>
+          </div>
+          <div class="text-secondary text-sm mt-16">of <strong class="text-amber">50</strong> capacity</div>
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin:16px 0;">
+            <div id="pax-bar" style="height:100%;width:68%;background:var(--amber);border-radius:4px;transition:width 0.3s;"></div>
+          </div>
+          <div id="pax-label" class="badge badge-amber" style="margin:0 auto;">MEDIUM</div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-group mb-16">
+          <label class="form-label">Board / Alight at Stop</label>
+          <div class="input-row">
+            <input type="number" class="form-input" placeholder="Boarded" min="0" />
+            <input type="number" class="form-input" placeholder="Alighted" min="0" />
+          </div>
+        </div>
+        <button class="btn-primary w-full" onclick="submitPassengerCount()">
+  Submit Count Update
+</button>
+      </section>
+    </div>
+
+    <!-- ── ROUTE DETAILS ── -->
+    <section id="route" class="card mb-24 fade-in">
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <div class="card-icon icon-blue">🗺️</div>
+          <h3>Route 42A — Stop Timeline</h3>
+        </div>
+        <span class="route-tag">42A · 12 stops</span>
+      </div>
+      <div class="stop-timeline">
+        <div class="stop-item done">
+          <span class="stop-name-t">City Centre Depot</span>
+          <span class="stop-time">06:00 ✓</span>
+        </div>
+        <div class="stop-item done">
+          <span class="stop-name-t">North Gate</span>
+          <span class="stop-time">06:12 ✓</span>
+        </div>
+        <div class="stop-item done">
+          <span class="stop-name-t">Main Street</span>
+          <span class="stop-time">06:24 ✓</span>
+        </div>
+        <div class="stop-item done">
+          <span class="stop-name-t">Central Station</span>
+          <span class="stop-time">06:38 ✓</span>
+        </div>
+        <div class="stop-item current">
+          <span class="stop-name-t">Park Avenue Stop</span>
+          <span class="stop-time">~06:51</span>
+        </div>
+        <div class="stop-item">
+          <span class="stop-name-t">Tech Park</span>
+          <span class="stop-time">07:05</span>
+        </div>
+        <div class="stop-item">
+          <span class="stop-name-t">South Bay</span>
+          <span class="stop-time">07:18</span>
+        </div>
+        <div class="stop-item">
+          <span class="stop-name-t">Airport Road</span>
+          <span class="stop-time">07:32</span>
+        </div>
+        <div class="stop-item">
+          <span class="stop-name-t">Airport Terminal</span>
+          <span class="stop-time">07:45</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── QUICK ACTIONS ── -->
+    <div class="flex gap-12 flex-wrap fade-in">
+      <button class="btn-primary" onclick="alert('Break logged!\n(Backend coming soon)')">☕ Log Break</button>
+      <button class="incident-btn" onclick="alert('Incident report sent!\n(Backend coming soon)')">⚠️ Report Incident</button>
+      <button class="btn-ghost" onclick="alert('End trip confirmed!\n(Backend coming soon)')">🏁 End Trip</button>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<script src="../js/main.js"></script>
+<script>
+// ── AUTH CHECK ──
+const sbfUser   = localStorage.getItem('sbf_user');
+const currentUser = sbfUser ? JSON.parse(sbfUser) : null;
+
+if (!currentUser) {
+  window.location.href = 'login.html';
+}
+
+if (currentUser && currentUser.role !== 'driver') {
+  alert('Access denied.');
+  window.location.href = 'login.html';
+}
+
+if (currentUser) {
+  const pageHeader = document.querySelector('.page-header h2');
+  if (pageHeader) {
+    pageHeader.textContent = `Welcome, ${currentUser.name}`;
+  }
+}
+
+// ── PASSENGER COUNTER ──
+let paxCount = 0;
+
+function changeCount(delta) {
+  paxCount = Math.max(0, Math.min(50, paxCount + delta));
+  document.getElementById('pax-count').textContent = paxCount;
+
+  const pct = (paxCount / 50) * 100;
+  const bar = document.getElementById('pax-bar');
+  const lbl = document.getElementById('pax-label');
+
+  if (pct < 50) {
+    bar.style.background  = '#00d464';
+    lbl.className         = 'badge badge-green';
+    lbl.textContent       = 'LOW';
+  } else if (pct < 80) {
+    bar.style.background  = 'var(--amber)';
+    lbl.className         = 'badge badge-amber';
+    lbl.textContent       = 'MEDIUM';
+  } else {
+    bar.style.background  = 'var(--red)';
+    lbl.className         = 'badge badge-red';
+    lbl.textContent       = 'HIGH';
+  }
+
+  document.getElementById('pax-bar').style.width = pct + '%';
+}
+
+// ── LOAD DRIVER BUS FROM MONGODB ──
+let driverBusId = null;
+
+async function loadDriverBus() {
+  try {
+    const token    = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/buses`, {
+      method:  'GET',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) throw new Error('API failed');
+
+    // Find bus assigned to this driver
+    const driverBus = data.buses.find(
+      b => b.driver.toLowerCase() === currentUser.name.toLowerCase()
+    );
+
+    if (driverBus) {
+      driverBusId = driverBus.busId;
+      paxCount    = driverBus.passengers || 0;
+
+      // Update UI with real bus data
+      document.getElementById('pax-count').textContent = paxCount;
+      document.getElementById('pax-bar').style.width   = 
+        ((paxCount / driverBus.capacity) * 100) + '%';
+
+      // Update trip status card
+      const routeEl = document.querySelector('.big-route-tag');
+      if (routeEl) routeEl.textContent = driverBus.route;
+
+      const busIdEl = document.querySelector('.font-mono.text-amber');
+      if (busIdEl) busIdEl.textContent = driverBus.busId;
+
+      const statusEl = document.querySelector('.trip-status-card .badge');
+      if (statusEl) statusEl.textContent = driverBus.status.toUpperCase();
+
+      console.log(`Driver bus loaded: ${driverBus.busId} on route ${driverBus.route}`);
+    } else {
+      console.log('No bus assigned to this driver yet.');
+    }
+
+  } catch (error) {
+    console.log('Backend not available. Using local state.');
+  }
+}
+
+// ── UPDATE LOCATION TO MONGODB ──
+async function handleLocationUpdate() {
+  const stop   = document.querySelector('#location select').value;
+  const status = document.querySelectorAll('#location select')[1]?.value || 'On Route';
+
+  if (!driverBusId) {
+    alert('No bus assigned to you yet. Contact admin.');
+    return;
+  }
+
+  try {
+    const token    = localStorage.getItem('sbf_token');
+    const response = await fetch(
+      `${API_BASE_URL}/buses/${driverBusId}/location`,
+      {
+        method:  'PATCH',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentStop: stop,
+          status:      status,
+          passengers:  paxCount
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.message);
+
+    alert(`✅ Location updated: ${stop}`);
+
+  } catch (error) {
+    alert('Location broadcast failed. Check connection.');
+  }
+}
+
+// ── SUBMIT PASSENGER COUNT TO MONGODB ──
+async function submitPassengerCount() {
+  if (!driverBusId) {
+    alert('No bus assigned to you yet.');
+    return;
+  }
+
+  try {
+    const token    = localStorage.getItem('sbf_token');
+    const response = await fetch(
+      `${API_BASE_URL}/buses/${driverBusId}/location`,
+      {
+        method:  'PATCH',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          passengers: paxCount
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.message);
+
+    alert(`✅ Passenger count updated: ${paxCount}`);
+
+  } catch (error) {
+    alert('Failed to update count. Check connection.');
+  }
+}
+
+// ── PAGE LOAD ──
+loadDriverBus();
+</script>
+</body>
+</html>

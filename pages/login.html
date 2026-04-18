@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartBus — Login</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/config.js"></script>
+  <style>
+    .auth-page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .auth-left {
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-left::after {
+      content: '🚍';
+      position: absolute;
+      bottom: -20px; right: -10px;
+      font-size: 12rem;
+      opacity: 0.04;
+      pointer-events: none;
+    }
+    .auth-left-inner { max-width: 380px; z-index: 1; }
+    .auth-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 48px;
+    }
+    .auth-logo-icon {
+      width: 48px; height: 48px;
+      background: var(--amber);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      font-size: 1.6rem;
+      box-shadow: var(--shadow-glow-amber);
+    }
+    .auth-logo-text { font-family: var(--font-display); font-size: 1.5rem; font-weight: 800; }
+    .auth-tagline { font-size: 1.6rem; font-family: var(--font-display); font-weight: 700; line-height: 1.3; margin-bottom: 16px; color: var(--text-primary); }
+    .auth-features { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-top: 32px; }
+    .auth-features li { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: var(--text-secondary); }
+    .auth-features li::before { content: '✓'; color: var(--teal); font-weight: 700; }
+
+    .auth-right {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 48px;
+      background: var(--bg-base);
+    }
+    .auth-form-box { width: 100%; max-width: 380px; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 32px; border-bottom: 1px solid var(--border); }
+    .auth-tab {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.2s;
+    }
+    .auth-tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+    .auth-form { display: flex; flex-direction: column; gap: 18px; }
+    .role-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .role-opt {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    .role-opt .role-icon { font-size: 1.2rem; display: block; margin-bottom: 4px; }
+    .role-opt:hover { border-color: var(--amber); color: var(--amber); }
+    .role-opt.selected { border-color: var(--amber); background: var(--amber-glow); color: var(--amber); }
+    .divider-text { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 0.78rem; }
+    .divider-text::before, .divider-text::after { content:''; flex:1; height:1px; background:var(--border); }
+    @media(max-width:800px) {
+      .auth-page { grid-template-columns: 1fr; }
+      .auth-left { display: none; }
+      .auth-right { padding: 40px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="auth-page">
+
+  <!-- LEFT PANEL -->
+  <div class="auth-left fade-in">
+    <div class="auth-left-inner">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">🚍</div>
+        <div class="auth-logo-text">Smart<span class="text-amber">Bus</span></div>
+      </div>
+      <div class="auth-tagline">Transit intelligence at your fingertips.</div>
+      <p class="text-secondary text-sm">Join thousands of commuters, drivers, and operators using AI-powered predictions to move smarter.</p>
+      <ul class="auth-features">
+        <li>Real-time arrival predictions powered by ML</li>
+        <li>Crowd level forecasting before you board</li>
+        <li>Live GPS tracking for every bus</li>
+        <li>Personalised route favourites & alerts</li>
+        <li>Role-based dashboards for all users</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL — AUTH FORM -->
+  <div class="auth-right fade-in-d1">
+    <div class="auth-form-box">
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tab-login"    onclick="switchTab('login')">Sign In</div>
+        <div class="auth-tab"        id="tab-register" onclick="switchTab('register')">Register</div>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <div id="form-login" class="auth-form">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" placeholder="you@example.com" id="login-email" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" placeholder="Enter your password" id="login-password" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Login As</label>
+          <div class="role-selector">
+            <div class="role-opt selected" onclick="selectRole(this,'passenger')">
+              <span class="role-icon">🧳</span>Passenger
+            </div>
+            <div class="role-opt" onclick="selectRole(this,'driver')">
+              <span class="role-icon">🚌</span>Driver
+            </div>
+            <div class="role-opt" onclick="selectRole(this,'admin')">
+              <span class="role-icon">⚙️</span>Admin
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary w-full" style="padding:13px;" onclick="handleLogin()">Sign In →</button>
+        <div class="divider-text">demo credentials</div>
+        <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted);line-height:1.9;">
+          any@email.com / any password<br>
+          Role determines which dashboard you'll see
+        </div>
+      </div>
+
+      <!-- REGISTER FORM (hidden by default) -->
+      <div id="form-register" class="auth-form" style="display:none;">
+  <div class="form-group">
+    <label class="form-label">Full Name</label>
+    <input type="text" class="form-input" 
+           id="reg-name"
+           placeholder="Your full name" />
+  </div>
+  <div class="form-group">
+    <label class="form-label">Email Address</label>
+    <input type="email" class="form-input" 
+           id="reg-email"
+           placeholder="you@example.com" />
+  </div>
+  <div class="form-group">
+    <label class="form-label">Password</label>
+    <input type="password" class="form-input" 
+           id="reg-password"
+           placeholder="Create a password (min 8 chars)" />
+  </div>
+        <div class="form-group">
+          <label class="form-label">Register As</label>
+         <div class="role-selector">
+  <div class="role-opt selected" onclick="selectRole(this,'passenger')">
+    <span class="role-icon">🧳</span>Passenger
+  </div>
+</div>
+<div style="
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+">
+  🔒 Driver and Admin accounts are created by the system administrator only.
+</div>
+        </div>
+        <button class="btn-primary w-full" style="padding:13px;" onclick="handleRegister()">Create Account →</button>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end auth-page -->
+<script src="../js/main.js"></script>
+<script>
+  let selectedRole = 'passenger';
+
+ function switchTab(tab) {
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('form-login').style.display    = tab === 'login'    ? 'flex' : 'none';
+  document.getElementById('form-register').style.display = tab === 'register' ? 'flex' : 'none';
+
+  // When switching to register, always force passenger role
+  if (tab === 'register') {
+    selectedRole = 'passenger';
+  }
+}
+
+  function selectRole(el, role) {
+    selectedRole = role;
+    el.closest('.role-selector').querySelectorAll('.role-opt').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+async function handleLogin() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+
+  if (!email || !password) {
+    showAuthError('login', 'Please enter your email and password.');
+    return;
+  }
+
+  try {
+    // Try backend first
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ 
+        email, 
+        password, 
+        role: selectedRole 
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showAuthError('login', data.message || 'Login failed.');
+      return;
+    }
+
+    // Save JWT token and user data
+    saveLoginData(data);
+
+    // Redirect based on role
+    const destinations = {
+      passenger: 'passenger.html',
+      driver:    'driver.html',
+      admin:     'admin.html'
+    };
+
+    window.location.href = destinations[data.user.role];
+
+  } catch (error) {
+    // Backend not running — fall back to localStorage
+    console.log('Backend not available. Using localStorage.');
+    handleLoginFallback(email, password);
+  }
+}
+
+// Fallback to localStorage if backend is down
+function handleLoginFallback(email, password) {
+  const savedUser = localStorage.getItem('sbf_registered_' + email);
+
+  if (savedUser) {
+    const userData = JSON.parse(savedUser);
+    if (userData.password !== password) {
+      showAuthError('login', 'Incorrect password.');
+      return;
+    }
+    const sessionUser = {
+      email: email,
+      name:  userData.name,
+      role:  selectedRole,
+      loginTime: new Date().toLocaleString()
+    };
+    localStorage.setItem('sbf_user', JSON.stringify(sessionUser));
+    localStorage.setItem('sbf_role', selectedRole);
+  } else {
+    // Demo mode
+    const sessionUser = {
+      email: email,
+      name:  getNameFromEmail(email),
+      role:  selectedRole,
+      loginTime: new Date().toLocaleString()
+    };
+    localStorage.setItem('sbf_user', JSON.stringify(sessionUser));
+    localStorage.setItem('sbf_role', selectedRole);
+  }
+
+  const destinations = {
+    passenger: 'passenger.html',
+    driver:    'driver.html',
+    admin:     'admin.html'
+  };
+  window.location.href = destinations[selectedRole];
+}
+function showAuthError(form, message) {
+  // Remove any existing message first
+  const existing = document.getElementById('auth-message');
+  if (existing) existing.remove();
+
+  const formEl = document.getElementById(
+    form === 'login' ? 'form-login' : 'form-register'
+  );
+
+  const msg = document.createElement('div');
+  msg.id = 'auth-message';
+  msg.style.cssText = `
+    background: rgba(255,71,87,0.1);
+    border: 1px solid rgba(255,71,87,0.3);
+    color: #ff4757;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+  `;
+  msg.textContent = '⚠️ ' + message;
+
+  // Insert before the submit button
+  const btn = formEl.querySelector('button');
+  formEl.insertBefore(msg, btn);
+}
+
+function showAuthSuccess(form, message) {
+  const existing = document.getElementById('auth-message');
+  if (existing) existing.remove();
+
+  const formEl = document.getElementById(
+    form === 'login' ? 'form-login' : 'form-register'
+  );
+
+  const msg = document.createElement('div');
+  msg.id = 'auth-message';
+  msg.style.cssText = `
+    background: rgba(0,212,100,0.1);
+    border: 1px solid rgba(0,212,100,0.3);
+    color: #00d464;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+  `;
+  msg.textContent = '✅ ' + message;
+
+  const btn = formEl.querySelector('button');
+  formEl.insertBefore(msg, btn);
+}
+
+
+// This creates a display name from their email
+// "rahul@gmail.com" becomes "Rahul"
+function getNameFromEmail(email) {
+  const namePart = email.split('@')[0];
+  return namePart.charAt(0).toUpperCase() + namePart.slice(1);
+}
+
+async function handleRegister() {
+  const name     = document.getElementById('reg-name').value.trim();
+  const email    = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value.trim();
+
+  if (!name || !email || !password) {
+    showAuthError('register', 'Please fill in all fields.');
+    return;
+  }
+
+  if (!email.includes('@')) {
+    showAuthError('register', 'Please enter a valid email address.');
+    return;
+  }
+
+  if (password.length < 6) {
+    showAuthError('register', 'Password must be at least 6 characters.');
+    return;
+  }
+
+  try {
+    // Try backend first
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        name,
+        email,
+        password,
+        role: 'passenger'
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showAuthError('register', data.message || 'Registration failed.');
+      return;
+    }
+
+    // Show success and switch to login
+    showAuthSuccess('register',
+      `Account created successfully! Welcome, ${name}. Please login.`
+    );
+
+    setTimeout(() => {
+      switchTab('login');
+      document.getElementById('login-email').value = email;
+    }, 1500);
+
+  } catch (error) {
+    // Backend not running — fall back to localStorage
+    console.log('Backend not available. Using localStorage.');
+    handleRegisterFallback(name, email, password);
+  }
+}
+
+// Fallback to localStorage if backend is down
+function handleRegisterFallback(name, email, password) {
+  const existing = localStorage.getItem('sbf_registered_' + email);
+  if (existing) {
+    showAuthError('register', 'This email is already registered. Please login.');
+    return;
+  }
+
+  const registeredUser = {
+    name,
+    email,
+    password,
+    role:         'passenger',
+    registeredOn: new Date().toLocaleString()
+  };
+
+  localStorage.setItem(
+    'sbf_registered_' + email,
+    JSON.stringify(registeredUser)
+  );
+
+  showAuthSuccess('register',
+    `Account created successfully! Welcome, ${name}. Please login.`
+  );
+
+  setTimeout(() => {
+    switchTab('login');
+    document.getElementById('login-email').value = email;
+  }, 1500);
+}
+</script>
+</body>
+</html>

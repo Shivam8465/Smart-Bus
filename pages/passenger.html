@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartBus — Passenger Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/config.js"></script>
+  <style>
+    .map-placeholder { height: 280px; }
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .search-bar .form-group { flex: 1; }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .bus-result-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 110px 130px 90px;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .bus-result-row:last-child { border-bottom: none; }
+    .bus-id { font-family: var(--font-mono); font-weight: 600; color: var(--teal); font-size: 0.92rem; }
+    .stop-name { color: var(--text-primary); font-size: 0.9rem; }
+    .stop-sub  { color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono); }
+    .eta-chip {
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--teal);
+    }
+    .fav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+    .fav-btn:hover { border-color: var(--amber); color: var(--amber); }
+    .notice-banner {
+      background: rgba(255,71,87,0.08);
+      border: 1px solid rgba(255,71,87,0.2);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.83rem;
+      color: var(--red);
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="brand-icon">🚍</div>
+    Smart<span class="accent">Bus</span>&nbsp;Forecast
+  </div>
+  <ul class="nav-links">
+    <li><a href="../index.html">Home</a></li>
+    <li><a href="prediction.html">Predictions</a></li>
+    <li><a href="passenger.html" class="active">Passenger</a></li>
+    <li><a href="driver.html">Driver</a></li>
+    <li><a href="admin.html">Admin</a></li>
+  </ul>
+  <div class="nav-actions">
+    <span class="badge badge-green">Passenger</span>
+    <button class="btn-ghost" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="page-wrapper">
+<div class="dashboard-container">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <p class="sidebar-title">Navigation</p>
+      <ul class="sidebar-menu">
+        <li><a href="#search"    class="active"><span class="menu-icon">🔍</span> Search Bus</a></li>
+        <li><a href="#map">      <span class="menu-icon">📍</span> Live Map</a></li>
+        <li><a href="#nearby">   <span class="menu-icon">🚏</span> Nearby Stops</a></li>
+        <li><a href="#favorites"><span class="menu-icon">⭐</span> Favourites</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-section">
+      <p class="sidebar-title">Quick Routes</p>
+      <ul class="sidebar-menu">
+        <li><a href="#"><span class="menu-icon">🚌</span> Route 42A</a></li>
+        <li><a href="#"><span class="menu-icon">🚌</span> Route 17B</a></li>
+        <li><a href="#"><span class="menu-icon">🚌</span> Route 08C</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="dashboard-content">
+    <div class="page-header fade-in">
+      <h2>Passenger Dashboard</h2>
+      <div class="breadcrumb">Home / <span>Passenger</span></div>
+    </div>
+
+    <!-- Service Alert -->
+    <div class="notice-banner fade-in-d1">
+      ⚠️ Route 08C experiencing delays of ~8 min due to road works on East Avenue.
+    </div>
+
+    <!-- ── SEARCH SECTION ── -->
+    <section id="search" class="card mb-24 fade-in-d1">
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <div class="card-icon icon-amber">🔍</div>
+          <h3>Search Bus by Route</h3>
+        </div>
+      </div>
+      <div class="search-bar mb-20">
+        <div class="form-group">
+          <label class="form-label">Route Number or Destination</label>
+          <input type="text" class="form-input" placeholder="e.g. 42A, Airport, Central Station…" id="route-search" />
+        </div>
+        <div class="form-group" style="max-width:180px">
+          <label class="form-label">Nearest Stop</label>
+          <select class="form-select" id="stop-select">
+            <option>Main Street</option>
+            <option>Park Avenue</option>
+            <option>Central Station</option>
+            <option>Tech Park</option>
+            <option>North Gate</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="runSearch()" style="padding:11px 24px;white-space:nowrap">Search</button>
+      </div>
+
+      <!-- Results -->
+      <div id="search-results">
+        <div class="result-header">
+          <span class="text-secondary text-sm font-mono">Showing arrivals at: <strong class="text-amber">Main Street Stop</strong></span>
+          <span class="badge badge-green">Live Data</span>
+        </div>
+        <!-- Row headers -->
+        <div style="display:grid;grid-template-columns:80px 1fr 110px 130px 90px;gap:12px;padding:0 0 8px;" class="text-xs font-mono text-muted">
+          <span>Route</span><span>Destination</span><span>Arrives</span><span>Crowd Level</span><span></span>
+        </div>
+        <!-- Data rows (dummy) -->
+        <div class="bus-result-row fade-in">
+          <span class="bus-id">42A</span>
+          <div>
+            <div class="stop-name">Airport Terminal</div>
+            <div class="stop-sub">via City Centre · 12 stops</div>
+          </div>
+          <span class="eta-chip">4 min</span>
+          <div class="crowd-meter crowd-medium">
+            <div class="crowd-bar-track"><div class="crowd-bar-fill"></div></div>
+            <span class="crowd-value">MEDIUM</span>
+          </div>
+          <button class="fav-btn">⭐ Save</button>
+        </div>
+        <div class="bus-result-row fade-in-d1">
+          <span class="bus-id">17B</span>
+          <div>
+            <div class="stop-name">University Campus</div>
+            <div class="stop-sub">via North Station · 9 stops</div>
+          </div>
+          <span class="eta-chip">11 min</span>
+          <div class="crowd-meter crowd-low">
+            <div class="crowd-bar-track"><div class="crowd-bar-fill"></div></div>
+            <span class="crowd-value">LOW</span>
+          </div>
+          <button class="fav-btn">⭐ Save</button>
+        </div>
+        <div class="bus-result-row fade-in-d2">
+          <span class="bus-id">08C</span>
+          <div>
+            <div class="stop-name">West Terminal</div>
+            <div class="stop-sub">via East Mall · 14 stops</div>
+          </div>
+          <span class="eta-chip" style="color:var(--red)">~19 min ⚠️</span>
+          <div class="crowd-meter crowd-high">
+            <div class="crowd-bar-track"><div class="crowd-bar-fill"></div></div>
+            <span class="crowd-value">HIGH</span>
+          </div>
+          <button class="fav-btn">⭐ Save</button>
+        </div>
+        <div class="bus-result-row fade-in-d3">
+          <span class="bus-id">33E</span>
+          <div>
+            <div class="stop-name">Tech Park</div>
+            <div class="stop-sub">via South Bay · 6 stops</div>
+          </div>
+          <span class="eta-chip">7 min</span>
+          <div class="crowd-meter crowd-medium">
+            <div class="crowd-bar-track"><div class="crowd-bar-fill"></div></div>
+            <span class="crowd-value">MEDIUM</span>
+          </div>
+          <button class="fav-btn">⭐ Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── GRID: MAP + CROWD ── -->
+    <div class="grid-2 mb-24">
+
+      <!-- Map Placeholder -->
+      <section id="map" class="card fade-in-d1">
+        <div class="card-header">
+          <div class="flex items-center gap-12">
+            <div class="card-icon icon-teal">📍</div>
+            <h3>Live Bus Location</h3>
+          </div>
+          <span class="badge badge-green">Live</span>
+        </div>
+        <div class="map-placeholder">
+          <div class="map-dot"></div>
+          <span class="map-label">Bus 42A — Main Street</span>
+          <span class="text-xs text-muted">Map integration coming with backend</span>
+        </div>
+        <div class="flex items-center justify-between mt-16 text-sm">
+          <span class="text-secondary">Bus ID: <span class="font-mono text-teal">BUS-001</span></span>
+          <span class="text-secondary">Speed: <span class="font-mono text-amber">34 km/h</span></span>
+          <span class="text-secondary">GPS: <span class="font-mono" style="color:var(--text-muted)">12.97°N, 77.59°E</span></span>
+        </div>
+      </section>
+
+      <!-- Crowd Level Detail -->
+      <section class="card fade-in-d2">
+        <div class="card-header">
+          <div class="flex items-center gap-12">
+            <div class="card-icon icon-amber">👥</div>
+            <h3>Crowd Forecast</h3>
+          </div>
+        </div>
+        <p class="text-secondary text-sm mb-20">Predicted occupancy for upcoming buses at your stop.</p>
+        <div class="flex-col gap-20">
+          <div>
+            <div class="flex justify-between mb-8">
+              <span class="text-secondary text-sm">Route 42A — 4 min</span>
+              <span class="badge badge-amber">MEDIUM</span>
+            </div>
+            <div class="crowd-bar-track" style="height:12px;">
+              <div class="crowd-bar-fill" style="background:var(--amber);width:68%;height:100%;border-radius:4px;"></div>
+            </div>
+            <div class="flex justify-between mt-8 text-xs font-mono text-muted">
+              <span>34 / 50 seats</span><span>68%</span>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-8">
+              <span class="text-secondary text-sm">Route 17B — 11 min</span>
+              <span class="badge badge-green">LOW</span>
+            </div>
+            <div class="crowd-bar-track" style="height:12px;">
+              <div class="crowd-bar-fill" style="background:#00d464;width:36%;height:100%;border-radius:4px;"></div>
+            </div>
+            <div class="flex justify-between mt-8 text-xs font-mono text-muted">
+              <span>18 / 50 seats</span><span>36%</span>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-8">
+              <span class="text-secondary text-sm">Route 08C — ~19 min</span>
+              <span class="badge badge-red">HIGH</span>
+            </div>
+            <div class="crowd-bar-track" style="height:12px;">
+              <div class="crowd-bar-fill" style="background:var(--red);width:92%;height:100%;border-radius:4px;"></div>
+            </div>
+            <div class="flex justify-between mt-8 text-xs font-mono text-muted">
+              <span>46 / 50 seats</span><span>92%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── NEARBY STOPS ── -->
+    <section id="nearby" class="card fade-in">
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <div class="card-icon icon-blue">🚏</div>
+          <h3>Nearby Stops</h3>
+        </div>
+        <span class="text-xs font-mono text-muted">Based on: Delhi, IN</span>
+      </div>
+      <div class="grid-3">
+        <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);">
+          <div class="font-mono text-amber" style="font-size:0.85rem;margin-bottom:4px;">🚏 Main Street</div>
+          <div class="text-xs text-muted">120 m away · Routes: 42A, 33E</div>
+        </div>
+        <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);">
+          <div class="font-mono text-amber" style="font-size:0.85rem;margin-bottom:4px;">🚏 Park Avenue</div>
+          <div class="text-xs text-muted">340 m away · Routes: 17B, 08C</div>
+        </div>
+        <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);">
+          <div class="font-mono text-amber" style="font-size:0.85rem;margin-bottom:4px;">🚏 Central Station</div>
+          <div class="text-xs text-muted">580 m away · Routes: 42A, 17B, 08C, 25D</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div><!-- end dashboard-container -->
+</div><!-- end page-wrapper -->
+
+<script src="../js/main.js"></script>
+<script>
+  // Check login and get user
+const currentUser = requireLogin('passenger');
+
+// Show their name in the navbar if logged in
+if (currentUser) {
+  // Update the role badge
+  const badge = document.querySelector('.nav-actions .badge');
+  if (badge) badge.textContent = currentUser.role.toUpperCase();
+  
+  // Add welcome message to page header
+  const pageHeader = document.querySelector('.page-header h2');
+  if (pageHeader) {
+    pageHeader.textContent = `Welcome, ${currentUser.name}`;
+  }
+}
+ async function runSearch() {
+  const input       = document.getElementById('route-search').value.trim().toUpperCase();
+  const selectedStop = document.getElementById('stop-select').value;
+  const container   = document.getElementById('search-results');
+
+  // Show loading state
+  container.innerHTML = `
+    <div style="text-align:center;padding:30px;
+                color:var(--text-muted);font-family:var(--font-mono);">
+      🔍 Searching...
+    </div>`;
+
+  try {
+    const token    = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/buses`, {
+      method:  'GET',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error('API failed');
+    }
+
+    // Filter by route if input provided
+    let buses = data.buses;
+    if (input) {
+      buses = buses.filter(bus =>
+        bus.route.toUpperCase().includes(input) ||
+        bus.busId.toUpperCase().includes(input)
+      );
+    }
+
+    displaySearchResults(buses, selectedStop);
+
+  } catch (error) {
+    // Fallback to dummy data
+    console.log('Backend not available. Using dummy data.');
+    const filtered = input
+      ? DUMMY.buses.filter(bus =>
+          bus.route.toUpperCase().includes(input) ||
+          bus.id.toUpperCase().includes(input)
+        )
+      : DUMMY.buses;
+    displaySearchResults(filtered, selectedStop);
+  }
+}
+function displaySearchResults(results, stop) {
+  const container = document.getElementById('search-results');
+
+  if (!results || results.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:40px;
+                  color:var(--text-muted);
+                  font-family:var(--font-mono);">
+        🔍 No buses found. Try a different route number.
+      </div>`;
+    return;
+  }
+
+  const rows = results.map(bus => {
+    // Handle both MongoDB format and dummy data format
+    const busId      = bus.busId    || bus.id;
+    const passengers = bus.passengers || 0;
+    const capacity   = bus.capacity   || 50;
+    const pct        = Math.round((passengers / capacity) * 100);
+    const crowdLevel = pct > 75 ? 'high' : pct > 45 ? 'medium' : 'low';
+    const crowdLabel = crowdLevel.toUpperCase();
+    const etaColor   = bus.status === 'Delayed' ? 'color:var(--red)' : 'color:var(--teal)';
+    const etaWarning = bus.status === 'Delayed' ? ' ⚠️' : '';
+    const eta        = bus.eta || '—';
+
+    return `
+      <div class="bus-result-row fade-in">
+        <span class="bus-id">${bus.route}</span>
+        <div>
+          <div class="stop-name">Route ${bus.route}</div>
+          <div class="stop-sub">
+            Driver: ${bus.driver} · Stop: ${stop || 'Any Stop'}
+          </div>
+        </div>
+        <span class="eta-chip" style="${etaColor}">
+          ${eta}${etaWarning}
+        </span>
+        <div class="crowd-meter crowd-${crowdLevel}">
+          <div class="crowd-bar-track">
+            <div class="crowd-bar-fill"></div>
+          </div>
+          <span class="crowd-value">${crowdLabel}</span>
+        </div>
+        <button class="fav-btn">⭐ Save</button>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="result-header">
+      <span class="text-secondary text-sm font-mono">
+        Results: <strong class="text-amber">
+          ${results.length} bus(es) found
+        </strong>
+      </span>
+      <span class="badge badge-green">Live Data</span>
+    </div>
+    <div style="display:grid;
+                grid-template-columns:80px 1fr 110px 130px 90px;
+                gap:12px;padding:0 0 8px;"
+         class="text-xs font-mono text-muted">
+      <span>Route</span>
+      <span>Details</span>
+      <span>Arrives</span>
+      <span>Crowd Level</span>
+      <span></span>
+    </div>
+    ${rows}`;
+}
+// Load all buses when page opens
+window.addEventListener('load', () => {
+  runSearch();
+});
+</script>
+</body>
+</html>

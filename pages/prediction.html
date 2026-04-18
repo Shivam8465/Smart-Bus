@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartBus — Predictions</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .prediction-hero {
+      background: linear-gradient(135deg, rgba(0,212,180,0.06), rgba(245,166,35,0.04));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      margin-bottom: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .prediction-hero::before {
+      content: '🔮';
+      position: absolute;
+      right: 36px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 6rem;
+      opacity: 0.08;
+    }
+    .filter-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 14px;
+      align-items: flex-end;
+    }
+    .result-section { margin-top: 28px; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-card:hover { border-color: var(--border-bright); transform: translateY(-3px); box-shadow: var(--shadow); }
+    .result-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .confidence-ring {
+      width: 70px; height: 70px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .confidence-ring svg { transform: rotate(-90deg); }
+    .confidence-ring .ring-bg   { fill: none; stroke: var(--border); stroke-width: 5; }
+    .confidence-ring .ring-fill { fill: none; stroke: var(--teal); stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+    .confidence-pct {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--teal);
+    }
+    .factor-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+    .factor-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+    .factor-item::before { content: '◇'; color: var(--amber); font-size: 0.5rem; }
+    .crowd-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+    }
+    .crowd-tag.low    { background: rgba(0,212,100,0.12); color: #00d464; border: 1px solid rgba(0,212,100,0.3); }
+    .crowd-tag.medium { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+    .crowd-tag.high   { background: var(--red-glow); color: var(--red); border: 1px solid rgba(255,71,87,0.3); }
+    .live-ticker {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .ticker-dot { width: 6px; height: 6px; background: var(--teal); border-radius: 50%; animation: blink 1.5s ease-in-out infinite; flex-shrink: 0; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .ticker-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .no-results {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .no-results .icon { font-size: 3rem; margin-bottom: 12px; display: block; opacity: 0.4; }
+    @media(max-width:700px) { .filter-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="brand-icon">🚍</div>
+    Smart<span class="accent">Bus</span>&nbsp;Forecast
+  </div>
+  <ul class="nav-links">
+    <li><a href="../index.html">Home</a></li>
+    <li><a href="prediction.html" class="active">Predictions</a></li>
+    <li><a href="passenger.html">Passenger</a></li>
+    <li><a href="driver.html">Driver</a></li>
+    <li><a href="admin.html">Admin</a></li>
+  </ul>
+  <div class="nav-actions" id="nav-actions">
+  <!-- Dynamically filled by JS below -->
+</div>
+</nav>
+
+<div class="page-wrapper">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(20px,3vw,40px);">
+
+    <!-- Hero -->
+    <div class="prediction-hero fade-in">
+      <div class="text-xs font-mono text-teal mb-8">◆ ML-POWERED</div>
+      <h2 class="mb-8">Bus Arrival Predictions</h2>
+      <p style="max-width:540px;">Select a route and stop below to get AI-predicted arrival times and crowd level forecasts in real time.</p>
+    </div>
+
+    <!-- Live Ticker -->
+    <div class="live-ticker fade-in-d1">
+      <div class="ticker-dot"></div>
+      <span class="ticker-text" id="live-ticker-text">
+        Route 42A delayed +2 min at Central Station · Route 17B on time · Route 08C heavy traffic on East Ave · Route 33E ahead of schedule
+      </span>
+    </div>
+
+    <!-- Filter -->
+    <div class="card mb-24 fade-in-d1">
+      <h3 class="mb-20">🔍 Get Prediction</h3>
+      <div class="filter-row">
+        <div class="form-group">
+          <label class="form-label">Route Number</label>
+       <select class="form-select" id="sel-route" onchange="updateStopDropdown()">
+  <option value="">— Select Route —</option>
+  <option value="42A">42A — City Centre → Airport</option>
+  <option value="17B">17B — North Station → University</option>
+  <option value="08C">08C — East Mall → West Terminal</option>
+  <option value="25D">25D — South Bay → Central Park</option>
+  <option value="33E">33E — Depot → Tech Park</option>
+</select>
+        </div>
+        <div class="form-group">
+         <label class="form-label">Your Stop</label>
+<select class="form-select" id="sel-stop">
+  <option value="">— Select Stop —</option>
+</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Day / Time</label>
+          <select class="form-select" id="sel-time">
+            <option>Now (Live)</option>
+            <option>Morning Peak (8–10 AM)</option>
+            <option>Midday (11 AM–2 PM)</option>
+            <option>Evening Peak (5–8 PM)</option>
+            <option>Night (after 9 PM)</option>
+          </select>
+        </div>
+        <button class="btn-teal" style="padding:11px 28px;" onclick="runPrediction()">Predict →</button>
+      </div>
+    </div>
+
+    <!-- Results Area -->
+    <div id="results-area" class="result-section fade-in-d2">
+      <!-- Default: show all predictions -->
+      <div class="flex items-center justify-between mb-20">
+        <h3>Upcoming Predictions — All Routes</h3>
+        <span class="badge badge-green">Live · Updated 12s ago</span>
+      </div>
+      <div class="result-grid" id="results-grid"></div>
+    </div>
+
+    <!-- Prediction Explainer -->
+    <div class="card mt-16 fade-in" style="margin-top:28px;">
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <div class="card-icon icon-blue">🤖</div>
+          <h3>How Predictions Work</h3>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div>
+          <div class="text-amber bold mb-8">📡 Real-Time GPS</div>
+          <p class="text-sm">Live location data from buses is fed into the model every 30 seconds to ensure accurate positional tracking.</p>
+        </div>
+        <div>
+          <div class="text-amber bold mb-8">📊 Historical Patterns</div>
+          <p class="text-sm">The ML model is trained on 6 months of trip history — accounting for time of day, day of week, and seasonal trends.</p>
+        </div>
+        <div>
+          <div class="text-amber bold mb-8">🚦 Traffic Integration</div>
+          <p class="text-sm">Live traffic conditions are factored in to dynamically adjust arrival estimates when congestion is detected.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="../js/main.js"></script>
+<script>
+  // Check login status and update navbar
+function updateNavbar() {
+  const navActions = document.getElementById('nav-actions');
+  const user = getLoggedInUser();
+
+  if (user) {
+    // User is logged in - show their name and logout
+    const dashboardLinks = {
+      passenger: 'passenger.html',
+      driver:    'driver.html',
+      admin:     'admin.html'
+    };
+    const dashboardLink = dashboardLinks[user.role] || 'login.html';
+
+    navActions.innerHTML = `
+      <span class="badge badge-green" 
+            style="margin-right:8px;">
+        ${user.role.toUpperCase()}
+      </span>
+      <button class="btn-ghost" 
+              onclick="window.location='${dashboardLink}'">
+        👤 ${user.name}
+      </button>
+      <button class="btn-ghost" 
+              onclick="logout()">
+        Logout
+      </button>
+    `;
+  } else {
+    // Not logged in - show login and register
+    navActions.innerHTML = `
+      <button class="btn-ghost" 
+              onclick="window.location='login.html'">
+        Log In
+      </button>
+      <button class="btn-primary" 
+              onclick="window.location='login.html'">
+        Register
+      </button>
+    `;
+  }
+}
+
+// Run immediately when page loads
+updateNavbar();
+  const CIRCUMFERENCE = 2 * Math.PI * 28; // r=28
+
+  const allPredictions = [
+    { route:'42A', dest:'Airport Terminal',     stop:'Main Street',     eta:'4 min',  crowd:'medium', pct:68, confidence:91, factors:['Light traffic on 42A corridor','34/50 seats filled','On schedule'] },
+    { route:'17B', dest:'University Campus',    stop:'Park Avenue',     eta:'11 min', crowd:'low',    pct:36, confidence:87, factors:['Route 17B running on time','Low demand period','18/50 seats filled'] },
+    { route:'08C', dest:'West Terminal',        stop:'Central Station', eta:'19 min', crowd:'high',   pct:92, confidence:78, factors:['Road works on East Ave (+8 min)','Near capacity: 46/50 seats','Peak hour demand'] },
+    { route:'25D', dest:'Central Park',         stop:'South Bay',       eta:'22 min', crowd:'low',    pct:28, confidence:94, factors:['Bus at depot, departing soon','7/45 seats filled','Off-peak period'] },
+    { route:'33E', dest:'Tech Park',            stop:'Tech Park Gate',  eta:'7 min',  crowd:'medium', pct:58, confidence:89, factors:['Slightly ahead of schedule','29/50 seats','Normal traffic'] },
+  ];
+
+  function makePredictionCard(p) {
+    const offset = CIRCUMFERENCE - (p.confidence / 100) * CIRCUMFERENCE;
+    const crowdIcon = {low:'🟢',medium:'🟡',high:'🔴'}[p.crowd];
+    const factors = p.factors.map(f => `<li class="factor-item">${f}</li>`).join('');
+    return `
+      <div class="result-card fade-in">
+        <div class="result-card-top">
+          <div>
+            <div class="flex items-center gap-8 mb-8">
+              <span class="route-tag">${p.route}</span>
+              <span class="badge badge-blue">ML PREDICTION</span>
+            </div>
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:2px;">${p.dest}</div>
+            <div class="text-xs font-mono text-muted">via ${p.stop}</div>
+          </div>
+          <div class="confidence-ring">
+            <svg viewBox="0 0 70 70" width="70" height="70">
+              <circle class="ring-bg"   cx="35" cy="35" r="28"/>
+              <circle class="ring-fill" cx="35" cy="35" r="28"
+                stroke-dasharray="${CIRCUMFERENCE}"
+                stroke-dashoffset="${offset}"/>
+            </svg>
+            <div class="confidence-pct">${p.confidence}%</div>
+          </div>
+        </div>
+
+        <div class="grid-2 mb-16">
+          <div class="arrival-display">
+            <div class="arrival-time">${p.eta.replace(' min','')}</div>
+            <div class="arrival-unit">min away</div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center;gap:10px;">
+            <div>
+              <div class="text-xs font-mono text-muted mb-6">CROWD LEVEL</div>
+              <span class="crowd-tag ${p.crowd}">${crowdIcon} ${p.crowd.toUpperCase()}</span>
+            </div>
+            <div>
+              <div class="crowd-bar-track"><div class="crowd-bar-fill" style="background:${p.crowd==='high'?'var(--red)':p.crowd==='medium'?'var(--amber)':'#00d464'};width:${p.pct}%;height:100%;border-radius:4px;"></div></div>
+              <div class="text-xs font-mono text-muted mt-4">${p.pct}% full</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <div class="text-xs font-mono text-muted mb-8">PREDICTION FACTORS</div>
+          <ul class="factor-list">${factors}</ul>
+        </div>
+      </div>`;
+  }
+
+ function renderResults(list) {
+  const grid = document.getElementById('results-grid');
+
+  if (!list || !list.length) {
+    grid.innerHTML = `
+      <div class="no-results" style="grid-column:1/-1;">
+        <span class="icon">🔍</span>
+        No predictions found.
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(p => {
+
+    // Handle both old dummy format and new regression format
+    const crowdLevel  = p.crowdLevel  || p.crowd     || 'medium';
+    const crowdPct    = p.crowdPercentage || p.pct    || 50;
+    const destination = p.routeName   || p.dest       || p.route;
+    const arrival     = p.arrivalTime || 
+                        (p.eta ? p.eta.replace(' min','') : '?');
+    const confidence  = p.confidence  || 85;
+    const stopLabel   = p.stopName    || p.stop       || 'Any Stop';
+    const factors     = p.factors     || [];
+
+    const crowdColors = {
+      low:    '#00d464',
+      medium: 'var(--amber)',
+      high:   'var(--red)'
+    };
+    const crowdColor = crowdColors[crowdLevel] || 'var(--amber)';
+    const crowdIcon  = { low:'🟢', medium:'🟡', high:'🔴' }[crowdLevel];
+
+    const offset      = CIRCUMFERENCE - (confidence / 100) * CIRCUMFERENCE;
+    const factorItems = factors.map(f => 
+      `<li class="factor-item">${f}</li>`
+    ).join('');
+
+    return `
+      <div class="result-card fade-in">
+
+        <div class="result-card-top">
+          <div>
+            <div class="flex items-center gap-8 mb-8">
+              <span class="route-tag">${p.route}</span>
+              <span class="badge badge-blue">REGRESSION</span>
+            </div>
+            <div style="font-weight:700;
+                        color:var(--text-primary);
+                        margin-bottom:2px;">
+              ${destination}
+            </div>
+            <div class="text-xs font-mono text-muted">
+              📍 ${stopLabel}
+            </div>
+          </div>
+          <div class="confidence-ring">
+            <svg viewBox="0 0 70 70" width="70" height="70">
+              <circle class="ring-bg" cx="35" cy="35" r="28"/>
+              <circle class="ring-fill" cx="35" cy="35" r="28"
+                stroke-dasharray="${CIRCUMFERENCE}"
+                stroke-dashoffset="${offset}"/>
+            </svg>
+            <div class="confidence-pct">${confidence}%</div>
+          </div>
+        </div>
+
+        <div class="grid-2 mb-16">
+          <div class="arrival-display">
+            <div class="arrival-time">${arrival}</div>
+            <div class="arrival-unit">min away</div>
+          </div>
+          <div style="display:flex;flex-direction:column;
+                      justify-content:center;gap:10px;">
+            <div>
+              <div class="text-xs font-mono text-muted mb-6">
+                CROWD LEVEL
+              </div>
+              <span class="crowd-tag ${crowdLevel}">
+                ${crowdIcon} ${crowdLevel.toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <div class="crowd-bar-track">
+                <div class="crowd-bar-fill" style="
+                  background:${crowdColor};
+                  width:${crowdPct}%;
+                  height:100%;
+                  border-radius:4px;">
+                </div>
+              </div>
+              <div class="text-xs font-mono text-muted mt-4">
+                ${crowdPct}% occupancy
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${factorItems ? `
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <div class="text-xs font-mono text-muted mb-8">
+            PREDICTION FACTORS
+          </div>
+          <ul class="factor-list">${factorItems}</ul>
+        </div>` : ''}
+
+      </div>`;
+  }).join('');
+}
+
+function runPrediction() {
+  const route      = document.getElementById('sel-route').value;
+  const stopName   = document.getElementById('sel-stop').value;
+  const timeSelect = document.getElementById('sel-time').value;
+
+  const timePeriodMap = {
+    'Now (Live)':             'now',
+    'Morning Peak (8–10 AM)': 'morning',
+    'Midday (11 AM–2 PM)':    'midday',
+    'Evening Peak (5–8 PM)':  'evening',
+    'Night (after 9 PM)':     'night'
+  };
+  const timePeriod = timePeriodMap[timeSelect] || 'now';
+
+  document.querySelector('#results-area h3').textContent =
+    route ? `Regression Prediction — Route ${route}` :
+            'Regression Predictions — All Routes';
+
+  if (route) {
+    const result = predictWithRegression(route, timePeriod, stopName);
+    renderResults([result]);
+  } else {
+    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
+    const results   = allRoutes.map(r =>
+      predictWithRegression(r, timePeriod, null)
+    );
+    renderResults(results);
+  }
+}
+ // Initial render using regression
+const routeDefaultTimes = {
+  '42A': 'morning',
+  '17B': 'morning',
+  '08C': 'evening',
+  '25D': 'midday',
+  '33E': 'night'
+};
+const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
+const initialResults = allRoutes.map(r =>
+  predictWithRegression(r, routeDefaultTimes[r], null)
+);
+renderResults(initialResults);
+
+  // Ticker scroll
+  const tickerMessages = [
+    'Route 42A delayed +2 min at Central Station · Route 17B on time · Route 08C heavy traffic on East Ave · Route 33E ahead of schedule',
+    'Prediction accuracy today: 91% · 3,847 passengers served · System status: All green',
+    'Next retraining in: 4h 32m · Model version: v2.4.1 · Data points used: 1.2M',
+  ];
+  let tickerIdx = 0;
+  setInterval(() => {
+    tickerIdx = (tickerIdx + 1) % tickerMessages.length;
+    document.getElementById('live-ticker-text').textContent = tickerMessages[tickerIdx];
+  }, 8000);
+  function updateStopDropdown() {
+  const route     = document.getElementById('sel-route').value;
+  const stopSelect = document.getElementById('sel-stop');
+
+  // Clear existing options
+  stopSelect.innerHTML = '<option value="">— Select Stop —</option>';
+
+  // If no route selected leave empty
+  if (!route) return;
+
+  // Get stops for this route from our data
+  const stops = ROUTE_STOPS[route] || [];
+
+  // Add each stop as an option
+  stops.forEach(stop => {
+    const option    = document.createElement('option');
+    option.value    = stop.name;
+    option.textContent = `Stop ${stop.position} — ${stop.name}`;
+    stopSelect.appendChild(option);
+  });
+}
+</script>
+</body>
+</html>

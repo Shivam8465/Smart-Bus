@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartBus Forecast — Home</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* ── HOME-SPECIFIC STYLES ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      padding: 80px clamp(20px,5vw,80px) 60px;
+    }
+    /* radial glow behind hero */
+    .hero::after {
+      content: '';
+      position: absolute;
+      top: 30%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 700px; height: 500px;
+      background: radial-gradient(ellipse, rgba(245,166,35,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      max-width: 760px;
+      text-align: center;
+      position: relative; z-index: 1;
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--amber-glow);
+      border: 1px solid rgba(245,166,35,0.3);
+      color: var(--amber);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 20px;
+      margin-bottom: 28px;
+    }
+    .hero-eyebrow::before { content: '◆'; font-size: 0.5rem; }
+    .hero h1 {
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+    .hero h1 .accent-line {
+      display: block;
+      color: var(--amber);
+    }
+    .hero-desc {
+      font-size: 1.05rem;
+      color: var(--text-secondary);
+      max-width: 540px;
+      margin: 0 auto 36px;
+      line-height: 1.75;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 60px;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 40px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .hero-stat {
+      text-align: center;
+    }
+    .hero-stat-value {
+      font-family: var(--font-mono);
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .hero-stat-label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin-top: 3px;
+    }
+    .hero-stat-value .teal { color: var(--teal); }
+
+    /* ── FEATURES ── */
+    .features-section {
+      padding: clamp(60px,8vw,100px) clamp(20px,5vw,80px);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .section-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--teal);
+      margin-bottom: 10px;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--amber), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover { transform: translateY(-4px); border-color: var(--border-bright); box-shadow: var(--shadow); }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-emoji { font-size: 2rem; margin-bottom: 16px; display: block; }
+    .feature-card h3 { color: var(--text-primary); margin-bottom: 8px; }
+    .feature-card p  { font-size: 0.88rem; line-height: 1.65; }
+
+    /* ── USER ROLES ── */
+    .roles-section {
+      padding: clamp(40px,6vw,80px) clamp(20px,5vw,80px);
+      background: var(--bg-surface);
+    }
+    .roles-inner { max-width: 1200px; margin: 0 auto; }
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 36px;
+    }
+    .role-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      text-align: center;
+      transition: all 0.25s;
+    }
+    .role-card:hover { border-color: var(--amber); box-shadow: 0 0 30px var(--amber-glow); }
+    .role-icon {
+      width: 64px; height: 64px;
+      background: var(--amber-glow);
+      border: 1px solid rgba(245,166,35,0.3);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem;
+      margin: 0 auto 16px;
+    }
+    .role-card h3 { color: var(--text-primary); margin-bottom: 8px; }
+    .role-card p  { font-size: 0.85rem; margin-bottom: 20px; }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      padding: clamp(60px,8vw,100px) clamp(20px,5vw,80px);
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .cta-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: clamp(40px,5vw,70px);
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-box::after {
+      content: '';
+      position: absolute;
+      bottom: -80px; right: -80px;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(0,212,180,0.08), transparent 70%);
+      pointer-events: none;
+    }
+    .cta-box h2 { margin-bottom: 12px; }
+    .cta-box p  { max-width: 480px; margin: 0 auto 28px; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 28px clamp(20px,5vw,80px);
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    footer span { color: var(--amber); }
+
+    @media (max-width: 700px) {
+      .roles-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ NAVBAR ═══════════ -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <div class="brand-icon">🚍</div>
+    Smart<span class="accent">Bus</span>&nbsp;Forecast
+  </div>
+  <ul class="nav-links">
+    <li><a href="index.html" class="active">Home</a></li>
+    <li><a href="pages/prediction.html">Predictions</a></li>
+    <li><a href="pages/passenger.html">Passenger</a></li>
+    <li><a href="pages/driver.html">Driver</a></li>
+    <li><a href="pages/admin.html">Admin</a></li>
+  </ul>
+ <div class="nav-actions" id="nav-actions">
+  <!-- Dynamically filled by JS -->
+</div>
+</nav>
+
+<div class="page-wrapper">
+
+  <!-- ═══════════ HERO ═══════════ -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-eyebrow fade-in">ML-Powered Transit Intelligence</div>
+      <h1 class="fade-in-d1">
+        Know When Your Bus<br>
+        <span class="accent-line">Arrives — Before It Does.</span>
+      </h1>
+      <p class="hero-desc fade-in-d2">
+        Real-time bus tracking, crowd level forecasting, and AI-powered arrival predictions — 
+        all in one unified transit operations platform.
+      </p>
+      <div class="hero-cta fade-in-d3">
+        <button class="btn-teal btn-lg" onclick="window.location='pages/prediction.html'">
+          🔮 Check Predictions
+        </button>
+        <button class="btn-ghost btn-lg" onclick="window.location='pages/passenger.html'">
+          View Live Map
+        </button>
+      </div>
+      <div class="hero-stats fade-in-d4">
+        <div class="hero-stat">
+          <div class="hero-stat-value"><span class="teal" id="live-buses">24</span></div>
+          <div class="hero-stat-label">Active Buses</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">12</div>
+          <div class="hero-stat-label">Routes Covered</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">87<span style="font-size:1.4rem">%</span></div>
+          <div class="hero-stat-label">On-Time Rate</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="live-passengers">3,847</div>
+          <div class="hero-stat-label">Passengers Today</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ FEATURES ═══════════ -->
+  <section class="features-section">
+    <p class="section-eyebrow">◆ Core Features</p>
+    <h2>Everything you need to navigate smarter</h2>
+    <div class="features-grid">
+      <div class="feature-card fade-in">
+        <span class="feature-emoji">🔮</span>
+        <h3>ML Arrival Predictions</h3>
+        <p>Our machine learning model analyzes traffic patterns, historical data, and real-time GPS to predict arrivals with high accuracy.</p>
+      </div>
+      <div class="feature-card fade-in-d1">
+        <span class="feature-emoji">👥</span>
+        <h3>Crowd Level Forecasting</h3>
+        <p>Know before you board — see predicted crowd levels (Low / Medium / High) so you can plan the most comfortable journey.</p>
+      </div>
+      <div class="feature-card fade-in-d2">
+        <span class="feature-emoji">📍</span>
+        <h3>Live Bus Tracking</h3>
+        <p>Watch your bus move in real time on an interactive map. Never miss it by arriving just a minute too late.</p>
+      </div>
+      <div class="feature-card fade-in-d3">
+        <span class="feature-emoji">📊</span>
+        <h3>Operations Dashboard</h3>
+        <p>Admins and drivers get a full operations view — fleet status, route analytics, incident reports, and more.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ USER ROLES ═══════════ -->
+  <section class="roles-section">
+    <div class="roles-inner">
+      <p class="section-eyebrow">◆ Designed For Everyone</p>
+      <h2>Three dashboards, one platform</h2>
+      <div class="roles-grid">
+        <div class="role-card fade-in">
+          <div class="role-icon">🧳</div>
+          <h3>Passenger</h3>
+          <p>Search routes, check arrivals, view crowd levels, and plan your commute with confidence.</p>
+          <button class="btn-primary w-full" onclick="window.location='pages/passenger.html'">Passenger Dashboard →</button>
+        </div>
+        <div class="role-card fade-in-d1">
+          <div class="role-icon">🚌</div>
+          <h3>Bus Driver</h3>
+          <p>Update your live location, log passenger counts, and stay informed of route changes in real time.</p>
+          <button class="btn-primary w-full" onclick="window.location='pages/driver.html'">Driver Dashboard →</button>
+        </div>
+        <div class="role-card fade-in-d2">
+          <div class="role-icon">⚙️</div>
+          <h3>Admin</h3>
+          <p>Manage the full fleet, configure routes, monitor system health, and analyze performance metrics.</p>
+          <button class="btn-primary w-full" onclick="window.location='pages/admin.html'">Admin Dashboard →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ CTA ═══════════ -->
+  <section class="cta-section">
+    <div class="cta-box fade-in">
+      <h2>Ready to ride smarter?</h2>
+      <p>Create your account and get instant access to real-time predictions and live tracking.</p>
+      <div class="flex gap-12 justify-between" style="justify-content:center;flex-wrap:wrap;">
+        <button class="btn-teal btn-lg" onclick="window.location='pages/login.html'">Create Free Account</button>
+        <button class="btn-ghost btn-lg" onclick="window.location='pages/prediction.html'">Try Without Account</button>
+      </div>
+    </div>
+  </section>
+
+</div><!-- end page-wrapper -->
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+© 2026 <span>SmartBus Forecast</span> · Built with ML + ❤️ · MERN Stack
+</footer>
+<script src="js/config.js"></script>
+<script src="js/main.js"></script>
+<script>
+  // Simulate live stat updates
+  setInterval(() => {
+    document.getElementById('live-buses').textContent = Math.floor(Math.random()*4+22);
+    const p = Math.floor(Math.random()*200+3700);
+    document.getElementById('live-passengers').textContent = p.toLocaleString();
+  }, 6000);
+  function updateNavbar() {
+  const navActions = document.getElementById('nav-actions');
+  const user = getLoggedInUser();
+
+  if (user) {
+    const dashboardLinks = {
+      passenger: 'pages/passenger.html',
+      driver:    'pages/driver.html',
+      admin:     'pages/admin.html'
+    };
+    const dashboardLink = dashboardLinks[user.role] || 'pages/login.html';
+
+    navActions.innerHTML = `
+      <span class="badge badge-green"
+            style="margin-right:8px;">
+        ${user.role.toUpperCase()}
+      </span>
+      <button class="btn-ghost"
+              onclick="window.location='${dashboardLink}'">
+        👤 ${user.name}
+      </button>
+      <button class="btn-ghost"
+              onclick="logoutFromHome()">
+        Logout
+      </button>
+    `;
+  } else {
+    navActions.innerHTML = `
+      <button class="btn-ghost"
+              onclick="window.location='pages/login.html'">
+        Log In
+      </button>
+      <button class="btn-primary"
+              onclick="window.location='pages/login.html'">
+        Get Started
+      </button>
+    `;
+  }
+}
+
+// index.html is in root so logout path is different
+function logoutFromHome() {
+  localStorage.removeItem('sbf_user');
+  localStorage.removeItem('sbf_role');
+  localStorage.removeItem('sbf_token');
+  window.location.href = 'pages/login.html';
+}
+
+updateNavbar();
+</script>
+</body>
+</html>
