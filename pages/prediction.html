@@ -168,11 +168,7 @@
           <label class="form-label">Route Number</label>
        <select class="form-select" id="sel-route" onchange="updateStopDropdown()">
   <option value="">— Select Route —</option>
-  <option value="42A">42A — City Centre → Airport</option>
-  <option value="17B">17B — North Station → University</option>
-  <option value="08C">08C — East Mall → West Terminal</option>
-  <option value="25D">25D — South Bay → Central Park</option>
-  <option value="33E">33E — Depot → Tech Park</option>
+  <!-- options filled by JS (fallback to static if needed) -->
 </select>
         </div>
         <div class="form-group">
@@ -550,27 +546,112 @@ loadLivePredictions();
     tickerIdx = (tickerIdx + 1) % tickerMessages.length;
     document.getElementById('live-ticker-text').textContent = tickerMessages[tickerIdx];
   }, 8000);
+  const ROUTES_FROM_DB = {};
+
+  function normalizeRouteCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/^RT-/, '');
+  }
+
+  function populateRouteDropdownFromDb(routes) {
+    const sel = document.getElementById('sel-route');
+    if (!sel) return;
+
+    // Preserve the placeholder option
+    sel.innerHTML = '<option value="">— Select Route —</option>';
+
+    (routes || []).forEach((r) => {
+      const code = normalizeRouteCode(r.routeId);
+      if (!code) return;
+      ROUTES_FROM_DB[code] = r;
+
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = `${code} — ${r.name || `Route ${code}`}`;
+      sel.appendChild(opt);
+    });
+  }
+
+  function populateRouteDropdownFallback() {
+    const sel = document.getElementById('sel-route');
+    if (!sel) return;
+
+    // Only fill if empty (besides placeholder)
+    if (sel.querySelectorAll('option').length > 1) return;
+
+    const fallback = [
+      { code: '42A', label: '42A — City Centre → Airport' },
+      { code: '17B', label: '17B — North Station → University' },
+      { code: '08C', label: '08C — East Mall → West Terminal' },
+      { code: '25D', label: '25D — South Bay → Central Park' },
+      { code: '33E', label: '33E — Depot → Tech Park' }
+    ];
+
+    fallback.forEach((r) => {
+      const opt = document.createElement('option');
+      opt.value = r.code;
+      opt.textContent = r.label;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function loadRoutesForPrediction() {
+    const token = localStorage.getItem('sbf_token');
+    if (!token) {
+      populateRouteDropdownFallback();
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/routes`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Routes load failed');
+      populateRouteDropdownFromDb(data.routes || []);
+    } catch (error) {
+      populateRouteDropdownFallback();
+    }
+  }
+
   function updateStopDropdown() {
-  const route     = document.getElementById('sel-route').value;
-  const stopSelect = document.getElementById('sel-stop');
+    const route = document.getElementById('sel-route').value;
+    const stopSelect = document.getElementById('sel-stop');
 
-  // Clear existing options
-  stopSelect.innerHTML = '<option value="">— Select Stop —</option>';
+    stopSelect.innerHTML = '<option value="">— Select Stop —</option>';
+    if (!route) return;
 
-  // If no route selected leave empty
-  if (!route) return;
+    // Prefer DB routes if available
+    const routeDoc = ROUTES_FROM_DB[route];
+    const stopsFromDb = routeDoc?.stops || [];
+    if (stopsFromDb.length) {
+      [...stopsFromDb]
+        .sort((a, b) => (a.position || 0) - (b.position || 0))
+        .forEach((stop) => {
+          const option = document.createElement('option');
+          option.value = stop.name;
+          option.textContent = `Stop ${stop.position} — ${stop.name}`;
+          stopSelect.appendChild(option);
+        });
+      return;
+    }
 
-  // Get stops for this route from our data
-  const stops = ROUTE_STOPS[route] || [];
+    // Fallback to hardcoded stop map
+    const stops = ROUTE_STOPS[route] || [];
+    stops.forEach((stop) => {
+      const option = document.createElement('option');
+      option.value = stop.name;
+      option.textContent = `Stop ${stop.position} — ${stop.name}`;
+      stopSelect.appendChild(option);
+    });
+  }
 
-  // Add each stop as an option
-  stops.forEach(stop => {
-    const option    = document.createElement('option');
-    option.value    = stop.name;
-    option.textContent = `Stop ${stop.position} — ${stop.name}`;
-    stopSelect.appendChild(option);
-  });
-}
+  // Load dropdown options on page load
+  loadRoutesForPrediction().then(() => updateStopDropdown());
 </script>
 </body>
 </html>
