@@ -306,13 +306,7 @@
         <div class="form-group">
           <label class="form-label">Route</label>
           <select class="form-select" id="new-bus-route">
-            <option value="42A">42A</option>
-            <option value="17B">17B</option>
-            <option value="08C">08C</option>
-            <option value="25D">25D</option>
-            <option value="33E">33E</option>
-            <option value="55F">55F</option>
-            <option value="62B">62B</option>
+            <option value="">Loading routes…</option>
           </select>
         </div>
         <div class="form-group">
@@ -428,6 +422,12 @@ Main Street"></textarea>
 <script src="../js/main.js"></script>
 <script>
   let cachedBuses = {};
+  function handleUnauthorized() {
+    // Token expired/invalid → clear session and force re-login
+    if (typeof clearLoginData === 'function') clearLoginData();
+    alert('Session expired or invalid token. Please login again.');
+    window.location.href = 'login.html';
+  }
 
   // ── AUTH CHECK ──
 const currentUser = requireLogin('admin');
@@ -481,6 +481,11 @@ if (currentUser) {
       });
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
 
 if (!response.ok) {
   console.log('Failed to load from DB. Using dummy data.');
@@ -620,6 +625,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
       const data = await response.json();
 
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
       if (!response.ok) {
         alert(data.message || 'Failed to add bus.');
         return;
@@ -689,6 +699,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
       const data = await response.json();
 
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
       if (!response.ok) {
         alert(data.message || 'Failed to add route.');
         return;
@@ -742,9 +757,14 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       });
 
       const data = await response.json();
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!response.ok) throw new Error(data.message || 'Routes load failed');
 
       renderRouteTable(data.routes || []);
+      populateBusRouteDropdown(data.routes || []);
       const totalRoutesEl = document.getElementById('total-routes');
       const activeRoutesEl = document.getElementById('active-routes');
       const activeCount = (data.routes || []).filter(r => (r.status || 'Active') === 'Active').length;
@@ -752,11 +772,41 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       if (activeRoutesEl) activeRoutesEl.textContent = `▲ ${activeCount} active now`;
     } catch (error) {
       renderRouteTable(fallbackRoutes);
+      populateBusRouteDropdown(fallbackRoutes);
       const totalRoutesEl = document.getElementById('total-routes');
       const activeRoutesEl = document.getElementById('active-routes');
       const activeCount = fallbackRoutes.filter(r => r.status === 'Active').length;
       if (totalRoutesEl) totalRoutesEl.textContent = fallbackRoutes.length;
       if (activeRoutesEl) activeRoutesEl.textContent = `▲ ${activeCount} active now`;
+    }
+  }
+
+  function normalizeRouteCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/^RT-/, '');
+  }
+
+  function populateBusRouteDropdown(routes) {
+    const sel = document.getElementById('new-bus-route');
+    if (!sel) return;
+
+    const list = (routes || [])
+      .map((r) => ({
+        code: normalizeRouteCode(r.routeId),
+        name: r.name || ''
+      }))
+      .filter((r) => r.code);
+
+    // Keep current selection if possible
+    const previous = sel.value;
+
+    sel.innerHTML = list.length
+      ? list
+          .map((r) => `<option value="${r.code}">${r.code} — ${r.name || `Route ${r.code}`}</option>`)
+          .join('')
+      : '<option value="">No routes found</option>';
+
+    if (previous && list.some((r) => r.code === previous)) {
+      sel.value = previous;
     }
   }
 
@@ -811,6 +861,10 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       });
 
       const data = await response.json();
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!response.ok) {
         alert(data.message || 'Failed to delete route.');
         return;
@@ -837,6 +891,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       });
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
 
       if (!response.ok) {
         alert(data.message || 'Failed to delete bus.');
@@ -927,6 +986,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       });
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
 
       if (!response.ok) {
         alert(data.message || 'Failed to create account.');
