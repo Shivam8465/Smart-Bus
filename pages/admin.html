@@ -145,9 +145,9 @@
       <div class="stat-card">
         <div class="card-icon icon-red" style="background:rgba(0,212,64,0.12);color:#00d464;">✅</div>
         <div>
-          <div class="stat-value" style="color:#00d464;">87%</div>
+          <div class="stat-value" id="on-time-rate" style="color:#00d464;">—</div>
           <div class="stat-label">On-Time Rate</div>
-          <div class="stat-delta down">▼ −2% this week</div>
+          <div class="stat-delta down" id="on-time-delta">Live from fleet</div>
         </div>
       </div>
     </section>
@@ -438,11 +438,19 @@ if (currentUser) {
     });
   });
 
-  // ── LIVE STAT ──
-  setInterval(() => {
-    const el = document.getElementById('pax-today');
-    if (el) el.textContent = (Math.floor(Math.random()*200)+3700).toLocaleString();
-  }, 7000);
+  function computeFleetStats(buses) {
+    const busData = buses || [];
+    const totalPassengers = busData.reduce((sum, b) => sum + (Number(b.passengers) || 0), 0);
+
+    // Define "on-time" as not Delayed (simple + explainable for college prototype)
+    const activeBuses = busData.filter(b => (b.status || '') !== 'Off Duty');
+    const onTimeBuses = activeBuses.filter(b => (b.status || '') !== 'Delayed');
+    const onTimeRate = activeBuses.length
+      ? Math.round((onTimeBuses.length / activeBuses.length) * 100)
+      : 0;
+
+    return { totalPassengers, onTimeRate, activeCount: activeBuses.length };
+  }
 
   // ── LOAD BUSES FROM MONGODB ──
   async function loadBusesFromDB() {
@@ -468,6 +476,9 @@ renderBusTable(data.buses);
 // Update stat cards with real data
 const totalEl  = document.getElementById('total-buses');
 const activeEl = document.getElementById('active-buses');
+const paxEl    = document.getElementById('pax-today');
+const onTimeEl = document.getElementById('on-time-rate');
+const onTimeDeltaEl = document.getElementById('on-time-delta');
 
 if (totalEl) totalEl.textContent = data.count;
 
@@ -476,9 +487,25 @@ if (activeEl) {
   activeEl.textContent = `▲ ${activeCount} active now`;
 }
 
+// Live fleet-derived stats
+const stats = computeFleetStats(data.buses);
+if (paxEl) paxEl.textContent = stats.totalPassengers.toLocaleString();
+if (onTimeEl) onTimeEl.textContent = `${stats.onTimeRate}%`;
+if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses tracked`;
+
     } catch (error) {
       console.log('Backend not available. Using dummy data.');
       renderBusTable(DUMMY.buses);
+      const paxEl    = document.getElementById('pax-today');
+      const onTimeEl = document.getElementById('on-time-rate');
+      const onTimeDeltaEl = document.getElementById('on-time-delta');
+      const stats = computeFleetStats(DUMMY.buses.map(b => ({
+        ...b,
+        busId: b.id
+      })));
+      if (paxEl) paxEl.textContent = stats.totalPassengers.toLocaleString();
+      if (onTimeEl) onTimeEl.textContent = `${stats.onTimeRate}%`;
+      if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses tracked`;
     }
   }
   
