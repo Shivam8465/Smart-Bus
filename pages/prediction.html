@@ -506,15 +506,22 @@ async function loadLivePredictions() {
       const etaMinutes = parseEtaMinutes(bus.eta);
       const fallback = predictWithRegression(bus.route, 'now', bus.currentStop || null);
       const arrivalTime = etaMinutes || fallback.arrivalTime;
+      // Confidence is a heuristic (not hardcoded per route):
+      // varies by GPS freshness, ETA availability, occupancy, incidents, and delay state.
       const now = Date.now();
       const last = bus.lastLocationAt ? new Date(bus.lastLocationAt).getTime() : null;
-      const freshnessBonus = last && (now - last) <= (2 * 60 * 1000) ? 6 : 0;
-      const etaSourceBonus = etaMinutes ? 12 : 0;
+      const minsSinceUpdate = last ? Math.round((now - last) / 60000) : null;
+      const freshBonus = minsSinceUpdate === null ? 0 : Math.max(0, 10 - Math.min(10, minsSinceUpdate * 2)); // 0..10
+      const etaBonus = etaMinutes ? 12 : 4;
       const stopBonus = bus.currentStop ? 4 : 0;
-      const delayedPenalty = bus.status === 'Delayed' ? -18 : 0;
-      const base = 70;
-      const confidence = Math.max(50, Math.min(96,
-        base + freshnessBonus + etaSourceBonus + stopBonus + delayedPenalty
+      const delayPenalty = bus.status === 'Delayed' ? -18 : 0;
+      const incidentsCount = Array.isArray(bus.incidents) ? bus.incidents.length : 0;
+      const incidentPenalty = Math.min(12, incidentsCount * 3) * -1;
+      const occupancyPenalty = occupancyPct > 90 ? -8 : occupancyPct > 75 ? -4 : occupancyPct < 25 ? -2 : 0;
+      const etaPenalty = etaMinutes && etaMinutes > 25 ? -6 : etaMinutes && etaMinutes > 15 ? -3 : 0;
+      const base = 64;
+      const confidence = Math.max(45, Math.min(96,
+        base + freshBonus + etaBonus + stopBonus + delayPenalty + incidentPenalty + occupancyPenalty + etaPenalty
       ));
 
       return {
@@ -529,7 +536,8 @@ async function loadLivePredictions() {
           `Live bus: ${bus.busId}`,
           `Passengers: ${bus.passengers}/${bus.capacity || 50}`,
           `Status: ${bus.status}`,
-          `Last GPS update: ${bus.lastLocationAt ? new Date(bus.lastLocationAt).toLocaleTimeString() : 'unknown'}`,
+          `Last GPS update: ${bus.lastLocationAt ? new Date(bus.lastLocationAt).toLocaleTimeString() : 'unknown'} (${minsSinceUpdate ?? '?'}m ago)`,
+          `Incidents: ${incidentsCount}`,
           `ETA source: ${etaMinutes ? 'backend' : 'regression fallback'}`
         ]
       };

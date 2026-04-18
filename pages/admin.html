@@ -442,19 +442,11 @@ if (currentUser) {
     const busData = buses || [];
     const totalPassengers = busData.reduce((sum, b) => sum + (Number(b.passengers) || 0), 0);
 
-    // Stricter "on-time" for prototype:
+    // On-time definition for prototype:
     // - exclude Off Duty
-    // - not Delayed
-    // - bus has sent a location update recently (freshness window)
+    // - on-time if status is NOT Delayed
     const activeBuses = busData.filter(b => (b.status || '') !== 'Off Duty');
-    const now = Date.now();
-    const freshnessMs = 2 * 60 * 1000; // 2 minutes
-    const onTimeBuses = activeBuses.filter(b => {
-      if ((b.status || '') === 'Delayed') return false;
-      const last = b.lastLocationAt ? new Date(b.lastLocationAt).getTime() : null;
-      if (!last) return false;
-      return (now - last) <= freshnessMs;
-    });
+    const onTimeBuses = activeBuses.filter(b => (b.status || '') !== 'Delayed');
     const onTimeRate = activeBuses.length
       ? Math.round((onTimeBuses.length / activeBuses.length) * 100)
       : 0;
