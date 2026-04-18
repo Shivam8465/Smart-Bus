@@ -387,12 +387,24 @@
         </div>
         <div class="form-group">
           <label class="form-label">Route Number</label>
-          <input type="text" class="form-input" id="new-route-number" placeholder="e.g. 55F" />
+          <input type="text" class="form-input" id="new-route-number" placeholder="e.g. 42A" oninput="autoFillRouteStops()" />
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Route Name</label>
         <input type="text" class="form-input" id="new-route-name" placeholder="e.g. East Hub → West Terminal" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Stop Names (optional)</label>
+        <textarea class="form-input" id="new-route-stop-names" rows="4"
+          placeholder="Enter one stop per line (or comma-separated)
+Example:
+City Centre Depot
+North Gate
+Main Street"></textarea>
+        <div class="text-xs text-muted mt-8" style="font-family:var(--font-mono);">
+          If left empty and the route number is known (42A/17B/08C/25D/33E), stops auto-fill.
+        </div>
       </div>
       <div class="input-row">
         <div class="form-group">
@@ -627,6 +639,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
     const routeName = document.getElementById('new-route-name').value.trim();
     const stopCount = parseInt(document.getElementById('new-route-stops').value, 10) || 0;
     const frequency = document.getElementById('new-route-frequency').value.trim();
+    const stopNamesRaw = document.getElementById('new-route-stop-names')?.value || '';
 
     if (!routeId || !routeName) {
       alert('Please fill route ID and route name.');
@@ -634,8 +647,23 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
     }
 
     const routeLabel = routeNumber ? `${routeNumber} — ${routeName}` : routeName;
-    const stops = Array.from({ length: Math.max(0, stopCount) }, (_, index) => ({
-      name: `Stop ${index + 1}`,
+    const parsedStopNames = stopNamesRaw
+      .split(/[\n,]+/g)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    // If stop names are not provided, auto-fill from built-in ROUTE_STOPS when possible
+    const normalizedRouteNumber = routeNumber.toUpperCase().trim();
+    const builtInStops = (typeof ROUTE_STOPS !== 'undefined' && ROUTE_STOPS && ROUTE_STOPS[normalizedRouteNumber])
+      ? ROUTE_STOPS[normalizedRouteNumber].map(s => s.name)
+      : [];
+
+    const finalStopNames = parsedStopNames.length
+      ? parsedStopNames
+      : (builtInStops.length ? builtInStops : Array.from({ length: Math.max(0, stopCount) }, (_, index) => `Stop ${index + 1}`));
+
+    const stops = finalStopNames.map((name, index) => ({
+      name,
       position: index + 1,
       distanceKm: index * 2
     }));
@@ -652,7 +680,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
           routeId,
           name: routeLabel,
           stops,
-          distance: `${Math.max(1, stopCount * 2)} km`,
+          distance: `${Math.max(1, stops.length * 2)} km`,
           frequency: frequency ? `${frequency} min` : ''
         })
       });
@@ -670,6 +698,26 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
     } catch (error) {
       alert('Backend not available. Cannot add route.');
     }
+  }
+
+  function autoFillRouteStops() {
+    const routeNumberEl = document.getElementById('new-route-number');
+    const stopNamesEl = document.getElementById('new-route-stop-names');
+    const stopCountEl = document.getElementById('new-route-stops');
+    if (!routeNumberEl || !stopNamesEl || !stopCountEl) return;
+
+    const routeNumber = routeNumberEl.value.toUpperCase().trim();
+    const builtIn = (typeof ROUTE_STOPS !== 'undefined' && ROUTE_STOPS && ROUTE_STOPS[routeNumber])
+      ? ROUTE_STOPS[routeNumber]
+      : null;
+
+    // Only auto-fill if user hasn't typed custom stops
+    const userTypedStops = stopNamesEl.value.trim().length > 0;
+    if (!builtIn) return;
+    if (userTypedStops) return;
+
+    stopNamesEl.value = builtIn.map(s => s.name).join('\n');
+    stopCountEl.value = String(builtIn.length);
   }
 
   // ── LOAD ROUTES FROM MONGODB ──
