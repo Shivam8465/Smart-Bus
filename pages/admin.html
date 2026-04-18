@@ -413,6 +413,7 @@
 </div>
 <script src="../js/main.js"></script>
 <script>
+  let cachedBuses = {};
 
   // ── AUTH CHECK ──
 const currentUser = requireLogin('admin');
@@ -488,6 +489,7 @@ if (activeEl) {
     if (!tbody) return;
 
     const busData = buses || DUMMY.buses;
+    cachedBuses = {};
 
     if (busData.length === 0) {
       tbody.innerHTML = `
@@ -501,6 +503,8 @@ if (activeEl) {
     }
 
     tbody.innerHTML = busData.map(bus => {
+      const busId = bus.busId || bus.id;
+      cachedBuses[busId] = bus;
       const pct        = Math.round((bus.passengers / bus.capacity) * 100);
       const crowdColor = pct > 80 ? 'var(--red)' :
                          pct > 55 ? 'var(--amber)' : '#00d464';
@@ -510,8 +514,6 @@ if (activeEl) {
         'At Stop':  'badge-blue',
         'Off Duty': 'badge-red'
       }[bus.status] || 'badge-blue';
-
-      const busId = bus.busId || bus.id;
 
       return `
         <tr>
@@ -771,8 +773,55 @@ if (activeEl) {
   }
 
   // ── EDIT BUS ──
-  function editBus(busId) {
-    alert(`Edit Bus ${busId} — Full edit form coming in next phase.`);
+  async function editBus(busId) {
+    const bus = cachedBuses[busId];
+    if (!bus) {
+      alert('Bus data not found. Please refresh.');
+      return;
+    }
+
+    const route = prompt('Update route:', bus.route || '');
+    if (route === null) return;
+    const driver = prompt('Update driver name:', bus.driver || '');
+    if (driver === null) return;
+    const status = prompt('Update status (On Route / At Stop / Delayed / Off Duty):', bus.status || 'On Route');
+    if (status === null) return;
+    const capacityInput = prompt('Update capacity:', String(bus.capacity || 50));
+    if (capacityInput === null) return;
+
+    const capacity = parseInt(capacityInput, 10);
+    if (!route.trim() || !driver.trim() || Number.isNaN(capacity) || capacity <= 0) {
+      alert('Invalid input. Edit cancelled.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('sbf_token');
+      const response = await fetch(`${API_BASE_URL}/buses/${busId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          route: route.trim(),
+          driver: driver.trim(),
+          status: status.trim(),
+          capacity
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.message || 'Failed to update bus.');
+        return;
+      }
+
+      alert(`✅ Bus ${busId} updated successfully.`);
+      loadBusesFromDB();
+    } catch (error) {
+      alert('Backend not available. Cannot update bus.');
+    }
   }
 
   // ── CREATE STAFF ACCOUNT ──

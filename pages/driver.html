@@ -389,6 +389,26 @@ function updatePassengerVisuals() {
   document.getElementById('pax-count').textContent = paxCount;
 }
 
+function updateStopTimeline(currentStop) {
+  if (!currentStop) return;
+  const stopItems = Array.from(document.querySelectorAll('.stop-timeline .stop-item'));
+  const stopNames = stopItems.map(item =>
+    item.querySelector('.stop-name-t')?.textContent?.trim() || ''
+  );
+
+  const matchedIndex = stopNames.findIndex(name =>
+    name.toLowerCase() === currentStop.toLowerCase()
+  );
+
+  if (matchedIndex < 0) return;
+
+  stopItems.forEach((item, index) => {
+    item.classList.remove('done', 'current');
+    if (index < matchedIndex) item.classList.add('done');
+    if (index === matchedIndex) item.classList.add('current');
+  });
+}
+
 async function loadDriverBus() {
   try {
     const token    = localStorage.getItem('sbf_token');
@@ -423,6 +443,12 @@ async function loadDriverBus() {
 
       const statusEl = document.querySelector('.trip-status-card .badge');
       if (statusEl) statusEl.textContent = driverBus.status.toUpperCase();
+
+      if (driverBus.currentStop) {
+        const stopSelect = document.querySelector('#location select');
+        if (stopSelect) stopSelect.value = driverBus.currentStop;
+        updateStopTimeline(driverBus.currentStop);
+      }
 
       console.log(`Driver bus loaded: ${driverBus.busId} on route ${driverBus.route}`);
     } else {
@@ -468,6 +494,7 @@ async function handleLocationUpdate() {
     if (!response.ok) throw new Error(data.message);
 
     alert(`✅ Location updated: ${stop}`);
+    updateStopTimeline(stop);
 
   } catch (error) {
     alert('Location broadcast failed. Check connection.');
