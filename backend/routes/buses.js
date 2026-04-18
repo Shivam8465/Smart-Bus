@@ -2,6 +2,7 @@ const express        = require('express');
 const router         = express.Router();
 const Bus            = require('../models/Bus');
 const Route          = require('../models/Route');
+const User           = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 const protect        = authMiddleware.protect;
 const authorizeRole  = authMiddleware.authorizeRole;
@@ -53,6 +54,43 @@ async function calculateBusEta(busLike) {
 
   const etaMinutes = Math.min(45, Math.max(2, Math.round(baseMinutes + occupancyPenalty + statusPenalty)));
   return `${etaMinutes} min`;
+}
+
+async function validateDriverAssignment(driverName, busIdToIgnore = null) {
+  const normalizedDriver = normalizeName(driverName || '');
+  if (!normalizedDriver) {
+    return { ok: false, status: 400, message: 'Driver name is required' };
+  }
+
+  const driverUser = await User.findOne({ role: 'driver' });
+  const matchingDriver = driverUser
+    ? await User.findOne({
+        role: 'driver',
+        name: new RegExp(`^${(driverName || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      })
+    : null;
+
+  if (!matchingDriver) {
+    return {
+      ok: false,
+      status: 400,
+      message: 'Assigned driver must be a registered driver account'
+    };
+  }
+
+  const assignedBus = await Bus.findOne({
+    driver: new RegExp(`^${(driverName || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+  });
+
+  if (assignedBus && assignedBus.busId !== busIdToIgnore) {
+    return {
+      ok: false,
+      status: 400,
+      message: `Driver ${matchingDriver.name} is already assigned to ${assignedBus.busId}`
+    };
+  }
+
+  return { ok: true, normalizedName: matchingDriver.name };
 }
 
 // ── GET ALL BUSES (Passenger and Admin can see) ──
@@ -134,10 +172,15 @@ router.post('/', protect, authorizeRole('admin'), async (req, res) => {
       });
     }
 
+    const driverValidation = await validateDriverAssignment(driver);
+    if (!driverValidation.ok) {
+      return res.status(driverValidation.status).json({ message: driverValidation.message });
+    }
+
     const newBus = new Bus({
       busId,
       route,
-      driver,
+      driver: driverValidation.normalizedName,
       capacity: capacity || 50
     });
     newBus.eta = await calculateBusEta(newBus);
@@ -166,11 +209,17 @@ router.put('/:id', protect, authorizeRole('admin'), async (req, res) => {
     }
 
     const merged = { ...existingBus.toObject(), ...req.body };
+    const nextDriverName = (req.body.driver || existingBus.driver || '').trim();
+    const driverValidation = await validateDriverAssignment(nextDriverName, req.params.id);
+    if (!driverValidation.ok) {
+      return res.status(driverValidation.status).json({ message: driverValidation.message });
+    }
+    merged.driver = driverValidation.normalizedName;
     const eta = await calculateBusEta(merged);
 
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
-      { ...req.body, eta },
+      { ...req.body, driver: driverValidation.normalizedName, eta },
       { new: true }
     );
 
