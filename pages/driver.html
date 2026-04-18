@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SmartBus — Driver Dashboard</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/config.js"></script>
   <style>
     .map-placeholder { height: 260px; }
     .trip-status-card {
@@ -308,9 +309,9 @@
 
     <!-- ── QUICK ACTIONS ── -->
     <div class="flex gap-12 flex-wrap fade-in">
-      <button class="btn-primary" onclick="alert('Break logged!\n(Backend coming soon)')">☕ Log Break</button>
-      <button class="incident-btn" onclick="alert('Incident report sent!\n(Backend coming soon)')">⚠️ Report Incident</button>
-      <button class="btn-ghost" onclick="alert('End trip confirmed!\n(Backend coming soon)')">🏁 End Trip</button>
+      <button class="btn-primary" onclick="logBreak()">☕ Log Break</button>
+      <button class="incident-btn" onclick="reportIncident()">⚠️ Report Incident</button>
+      <button class="btn-ghost" onclick="endTrip()">🏁 End Trip</button>
     </div>
 
   </main>
@@ -320,16 +321,9 @@
 <script src="../js/main.js"></script>
 <script>
 // ── AUTH CHECK ──
-const sbfUser   = localStorage.getItem('sbf_user');
-const currentUser = sbfUser ? JSON.parse(sbfUser) : null;
-
+const currentUser = requireLogin('driver');
 if (!currentUser) {
-  window.location.href = 'login.html';
-}
-
-if (currentUser && currentUser.role !== 'driver') {
-  alert('Access denied.');
-  window.location.href = 'login.html';
+  // requireLogin handles redirect
 }
 
 if (currentUser) {
@@ -340,13 +334,14 @@ if (currentUser) {
 }
 
 // ── PASSENGER COUNTER ──
-let paxCount = 0;
+let paxCount = parseInt(document.getElementById('pax-count')?.textContent || '0', 10);
+const busCapacity = 50;
 
 function changeCount(delta) {
-  paxCount = Math.max(0, Math.min(50, paxCount + delta));
+  paxCount = Math.max(0, Math.min(currentBusCapacity, paxCount + delta));
   document.getElementById('pax-count').textContent = paxCount;
 
-  const pct = (paxCount / 50) * 100;
+  const pct = (paxCount / currentBusCapacity) * 100;
   const bar = document.getElementById('pax-bar');
   const lbl = document.getElementById('pax-label');
 
@@ -369,11 +364,35 @@ function changeCount(delta) {
 
 // ── LOAD DRIVER BUS FROM MONGODB ──
 let driverBusId = null;
+let currentBusCapacity = busCapacity;
+
+function updatePassengerVisuals() {
+  const pct = (paxCount / currentBusCapacity) * 100;
+  const bar = document.getElementById('pax-bar');
+  const lbl = document.getElementById('pax-label');
+
+  if (pct < 50) {
+    bar.style.background = '#00d464';
+    lbl.className = 'badge badge-green';
+    lbl.textContent = 'LOW';
+  } else if (pct < 80) {
+    bar.style.background = 'var(--amber)';
+    lbl.className = 'badge badge-amber';
+    lbl.textContent = 'MEDIUM';
+  } else {
+    bar.style.background = 'var(--red)';
+    lbl.className = 'badge badge-red';
+    lbl.textContent = 'HIGH';
+  }
+
+  bar.style.width = pct + '%';
+  document.getElementById('pax-count').textContent = paxCount;
+}
 
 async function loadDriverBus() {
   try {
     const token    = localStorage.getItem('sbf_token');
-    const response = await fetch(`${API_BASE_URL}/buses`, {
+    const response = await fetch(`${API_BASE_URL}/buses/my-bus`, {
       method:  'GET',
       headers: {
         'Content-Type':  'application/json',
@@ -385,19 +404,15 @@ async function loadDriverBus() {
 
     if (!response.ok) throw new Error('API failed');
 
-    // Find bus assigned to this driver
-    const driverBus = data.buses.find(
-      b => b.driver.toLowerCase() === currentUser.name.toLowerCase()
-    );
+    const driverBus = data.bus;
 
     if (driverBus) {
       driverBusId = driverBus.busId;
       paxCount    = driverBus.passengers || 0;
+      currentBusCapacity = driverBus.capacity || busCapacity;
 
       // Update UI with real bus data
-      document.getElementById('pax-count').textContent = paxCount;
-      document.getElementById('pax-bar').style.width   = 
-        ((paxCount / driverBus.capacity) * 100) + '%';
+      updatePassengerVisuals();
 
       // Update trip status card
       const routeEl = document.querySelector('.big-route-tag');
@@ -416,6 +431,7 @@ async function loadDriverBus() {
 
   } catch (error) {
     console.log('Backend not available. Using local state.');
+    updatePassengerVisuals();
   }
 }
 
@@ -492,7 +508,83 @@ async function submitPassengerCount() {
   }
 }
 
+async function logBreak() {
+  if (!driverBusId) {
+    alert('No bus assigned to you yet.');
+    return;
+  }
+  try {
+    const token = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/buses/${driverBusId}/break`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Break update failed');
+    alert('✅ Break logged successfully.');
+  } catch (error) {
+    alert('Failed to log break. Check connection.');
+  }
+}
+
+async function reportIncident() {
+  if (!driverBusId) {
+    alert('No bus assigned to you yet.');
+    return;
+  }
+  const description = prompt('Describe the incident briefly:');
+  if (description === null) return;
+  try {
+    const token = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/buses/${driverBusId}/incidents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        type: 'Driver Report',
+        description: description.trim() || 'Incident reported by driver'
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Incident report failed');
+    alert('✅ Incident report sent.');
+  } catch (error) {
+    alert('Failed to report incident. Check connection.');
+  }
+}
+
+async function endTrip() {
+  if (!driverBusId) {
+    alert('No bus assigned to you yet.');
+    return;
+  }
+  if (!confirm('End trip now and set bus to Off Duty?')) return;
+  try {
+    const token = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/buses/${driverBusId}/end-trip`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'End trip failed');
+    paxCount = 0;
+    updatePassengerVisuals();
+    alert('✅ Trip ended successfully.');
+  } catch (error) {
+    alert('Failed to end trip. Check connection.');
+  }
+}
+
 // ── PAGE LOAD ──
+updatePassengerVisuals();
 loadDriverBus();
 </script>
 </body>

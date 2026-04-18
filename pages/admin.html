@@ -129,9 +129,9 @@
       <div class="stat-card">
         <div class="card-icon icon-amber">🗺️</div>
         <div>
-          <div class="stat-value">12</div>
+          <div class="stat-value" id="total-routes">0</div>
           <div class="stat-label">Active Routes</div>
-          <div class="stat-delta up">▲ All operational</div>
+          <div class="stat-delta up" id="active-routes">▲ Loading...</div>
         </div>
       </div>
       <div class="stat-card">
@@ -202,42 +202,11 @@
             <th>Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="route-table-body">
           <tr>
-            <td class="td-mono">RT-42A</td>
-            <td>City Centre → Airport</td>
-            <td>12</td>
-            <td>18 km</td>
-            <td class="td-mono">15 min</td>
-            <td><span class="badge badge-green">Active</span></td>
-            <td><button class="action-btn">Edit</button><button class="action-btn danger">Delete</button></td>
-          </tr>
-          <tr>
-            <td class="td-mono">RT-17B</td>
-            <td>North Station → University</td>
-            <td>9</td>
-            <td>11 km</td>
-            <td class="td-mono">20 min</td>
-            <td><span class="badge badge-green">Active</span></td>
-            <td><button class="action-btn">Edit</button><button class="action-btn danger">Delete</button></td>
-          </tr>
-          <tr>
-            <td class="td-mono">RT-08C</td>
-            <td>East Mall → West Terminal</td>
-            <td>14</td>
-            <td>22 km</td>
-            <td class="td-mono">10 min</td>
-            <td><span class="badge badge-amber">Delayed</span></td>
-            <td><button class="action-btn">Edit</button><button class="action-btn danger">Delete</button></td>
-          </tr>
-          <tr>
-            <td class="td-mono">RT-25D</td>
-            <td>South Bay → Central Park</td>
-            <td>7</td>
-            <td>8 km</td>
-            <td class="td-mono">30 min</td>
-            <td><span class="badge badge-green">Active</span></td>
-            <td><button class="action-btn">Edit</button><button class="action-btn danger">Delete</button></td>
+            <td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">
+              Loading routes...
+            </td>
           </tr>
         </tbody>
       </table>
@@ -414,31 +383,31 @@
       <div class="input-row">
         <div class="form-group">
           <label class="form-label">Route ID</label>
-          <input type="text" class="form-input" placeholder="e.g. RT-55F" />
+          <input type="text" class="form-input" id="new-route-id" placeholder="e.g. RT-55F" />
         </div>
         <div class="form-group">
           <label class="form-label">Route Number</label>
-          <input type="text" class="form-input" placeholder="e.g. 55F" />
+          <input type="text" class="form-input" id="new-route-number" placeholder="e.g. 55F" />
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Route Name</label>
-        <input type="text" class="form-input" placeholder="e.g. East Hub → West Terminal" />
+        <input type="text" class="form-input" id="new-route-name" placeholder="e.g. East Hub → West Terminal" />
       </div>
       <div class="input-row">
         <div class="form-group">
           <label class="form-label">Number of Stops</label>
-          <input type="number" class="form-input" value="8" />
+          <input type="number" class="form-input" id="new-route-stops" value="8" />
         </div>
         <div class="form-group">
           <label class="form-label">Frequency (min)</label>
-          <input type="number" class="form-input" value="20" />
+          <input type="number" class="form-input" id="new-route-frequency" value="20" />
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-ghost" onclick="closeModal('add-route-modal')">Cancel</button>
-      <button class="btn-primary" onclick="closeModal('add-route-modal');alert('Route added!\n(Backend coming soon)')">Add Route</button>
+      <button class="btn-primary" onclick="addNewRoute()">Add Route</button>
     </div>
   </div>
 </div>
@@ -446,17 +415,9 @@
 <script>
 
   // ── AUTH CHECK ──
-// Check login manually without blocking
-const sbfUser = localStorage.getItem('sbf_user');
-const currentUser = sbfUser ? JSON.parse(sbfUser) : null;
-
+const currentUser = requireLogin('admin');
 if (!currentUser) {
-  window.location.href = 'login.html';
-}
-
-if (currentUser && currentUser.role !== 'admin') {
-  alert('Access denied.');
-  window.location.href = 'login.html';
+  // requireLogin handles redirect
 }
 
 if (currentUser) {
@@ -628,6 +589,158 @@ if (activeEl) {
     }
   }
 
+  // ── ADD NEW ROUTE TO MONGODB ──
+  async function addNewRoute() {
+    const routeId = document.getElementById('new-route-id').value.trim();
+    const routeNumber = document.getElementById('new-route-number').value.trim();
+    const routeName = document.getElementById('new-route-name').value.trim();
+    const stopCount = parseInt(document.getElementById('new-route-stops').value, 10) || 0;
+    const frequency = document.getElementById('new-route-frequency').value.trim();
+
+    if (!routeId || !routeName) {
+      alert('Please fill route ID and route name.');
+      return;
+    }
+
+    const routeLabel = routeNumber ? `${routeNumber} — ${routeName}` : routeName;
+    const stops = Array.from({ length: Math.max(0, stopCount) }, (_, index) => ({
+      name: `Stop ${index + 1}`,
+      position: index + 1,
+      distanceKm: index * 2
+    }));
+
+    try {
+      const token = localStorage.getItem('sbf_token');
+      const response = await fetch(`${API_BASE_URL}/routes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          routeId,
+          name: routeLabel,
+          stops,
+          distance: `${Math.max(1, stopCount * 2)} km`,
+          frequency: frequency ? `${frequency} min` : ''
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.message || 'Failed to add route.');
+        return;
+      }
+
+      closeModal('add-route-modal');
+      alert(`✅ Route ${routeId} added successfully.`);
+      loadRoutesFromDB();
+    } catch (error) {
+      alert('Backend not available. Cannot add route.');
+    }
+  }
+
+  // ── LOAD ROUTES FROM MONGODB ──
+  async function loadRoutesFromDB() {
+    const fallbackRoutes = [
+      { routeId: 'RT-42A', name: '42A — City Centre → Airport', totalStops: 9, distance: '18 km', frequency: '15 min', status: 'Active' },
+      { routeId: 'RT-17B', name: '17B — North Station → University', totalStops: 5, distance: '11 km', frequency: '20 min', status: 'Active' },
+      { routeId: 'RT-08C', name: '08C — East Mall → West Terminal', totalStops: 6, distance: '22 km', frequency: '10 min', status: 'Suspended' },
+      { routeId: 'RT-25D', name: '25D — South Bay → Central Park', totalStops: 3, distance: '8 km', frequency: '30 min', status: 'Active' }
+    ];
+
+    try {
+      const token = localStorage.getItem('sbf_token');
+      const response = await fetch(`${API_BASE_URL}/routes`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Routes load failed');
+
+      renderRouteTable(data.routes || []);
+      const totalRoutesEl = document.getElementById('total-routes');
+      const activeRoutesEl = document.getElementById('active-routes');
+      const activeCount = (data.routes || []).filter(r => (r.status || 'Active') === 'Active').length;
+      if (totalRoutesEl) totalRoutesEl.textContent = data.count || 0;
+      if (activeRoutesEl) activeRoutesEl.textContent = `▲ ${activeCount} active now`;
+    } catch (error) {
+      renderRouteTable(fallbackRoutes);
+      const totalRoutesEl = document.getElementById('total-routes');
+      const activeRoutesEl = document.getElementById('active-routes');
+      const activeCount = fallbackRoutes.filter(r => r.status === 'Active').length;
+      if (totalRoutesEl) totalRoutesEl.textContent = fallbackRoutes.length;
+      if (activeRoutesEl) activeRoutesEl.textContent = `▲ ${activeCount} active now`;
+    }
+  }
+
+  function renderRouteTable(routes) {
+    const tbody = document.getElementById('route-table-body');
+    if (!tbody) return;
+
+    if (!routes || routes.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">
+            No routes found in database.
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = routes.map((route) => {
+      const status = route.status || 'Active';
+      const statusBadge = {
+        Active: 'badge-green',
+        Inactive: 'badge-blue',
+        Suspended: 'badge-amber'
+      }[status] || 'badge-blue';
+
+      return `
+        <tr>
+          <td class="td-mono">${route.routeId}</td>
+          <td>${route.name}</td>
+          <td>${route.totalStops || (route.stops ? route.stops.length : 0)}</td>
+          <td>${route.distance || '—'}</td>
+          <td class="td-mono">${route.frequency || '—'}</td>
+          <td><span class="badge ${statusBadge}">${status.toUpperCase()}</span></td>
+          <td>
+            <button class="action-btn danger" onclick="deleteRoute('${route.routeId}')">Delete</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function deleteRoute(routeId) {
+    if (!confirm(`Delete Route ${routeId}?`)) return;
+
+    try {
+      const token = localStorage.getItem('sbf_token');
+      const response = await fetch(`${API_BASE_URL}/routes/${routeId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.message || 'Failed to delete route.');
+        return;
+      }
+      alert(`✅ ${data.message}`);
+      loadRoutesFromDB();
+    } catch (error) {
+      alert('Backend not available. Cannot delete route.');
+    }
+  }
+
   // ── DELETE BUS FROM MONGODB ──
   async function deleteBus(busId) {
     if (!confirm(`Remove Bus ${busId} from fleet?`)) return;
@@ -715,6 +828,7 @@ if (activeEl) {
 
   // ── INITIAL LOAD ──
   loadBusesFromDB();
+  loadRoutesFromDB();
 
 </script>
 </body>

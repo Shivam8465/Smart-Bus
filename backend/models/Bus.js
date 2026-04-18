@@ -47,6 +47,30 @@ const busSchema = new mongoose.Schema(
     longitude: {
       type:    Number,
       default: 77.2090
+    },
+    incidents: [
+      {
+        type: {
+          type:    String,
+          default: 'General'
+        },
+        description: {
+          type:    String,
+          default: ''
+        },
+        reportedBy: {
+          type:    String,
+          default: ''
+        },
+        createdAt: {
+          type:    Date,
+          default: Date.now
+        }
+      }
+    ],
+    lastBreakAt: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }

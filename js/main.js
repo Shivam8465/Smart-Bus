@@ -184,6 +184,7 @@ function getLoggedInRole() {
 
 // Logout - clear everything and go to login
 function logout() {
+  localStorage.removeItem('sbf_token');
   localStorage.removeItem('sbf_user');
   localStorage.removeItem('sbf_role');
   window.location.href = '../pages/login.html';

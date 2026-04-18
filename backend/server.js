@@ -41,6 +41,14 @@ try {
 } catch (error) {
   console.log('Error loading bus routes:', error.message);
 }
+// Route routes
+try {
+  const routeRoutes = require('./routes/routes');
+  app.use('/api/routes', routeRoutes);
+  console.log('Route routes loaded successfully');
+} catch (error) {
+  console.log('Error loading route routes:', error.message);
+}
 const authMiddleware = require('./middleware/auth');
 const protect = authMiddleware.protect;
 app.get('/api/protected', protect, (req, res) => {
