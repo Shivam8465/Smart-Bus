@@ -255,6 +255,7 @@ router.patch('/:id/location', protect, authorizeRole('driver'), async (req, res)
 
     const merged = { ...existingBus.toObject(), ...updates };
     updates.eta = await calculateBusEta(merged);
+    updates.lastLocationAt = new Date();
 
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },

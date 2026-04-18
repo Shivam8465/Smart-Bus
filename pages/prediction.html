@@ -506,7 +506,16 @@ async function loadLivePredictions() {
       const etaMinutes = parseEtaMinutes(bus.eta);
       const fallback = predictWithRegression(bus.route, 'now', bus.currentStop || null);
       const arrivalTime = etaMinutes || fallback.arrivalTime;
-      const confidence = bus.status === 'Delayed' ? 76 : 88;
+      const now = Date.now();
+      const last = bus.lastLocationAt ? new Date(bus.lastLocationAt).getTime() : null;
+      const freshnessBonus = last && (now - last) <= (2 * 60 * 1000) ? 6 : 0;
+      const etaSourceBonus = etaMinutes ? 12 : 0;
+      const stopBonus = bus.currentStop ? 4 : 0;
+      const delayedPenalty = bus.status === 'Delayed' ? -18 : 0;
+      const base = 70;
+      const confidence = Math.max(50, Math.min(96,
+        base + freshnessBonus + etaSourceBonus + stopBonus + delayedPenalty
+      ));
 
       return {
         route: bus.route,
@@ -520,6 +529,7 @@ async function loadLivePredictions() {
           `Live bus: ${bus.busId}`,
           `Passengers: ${bus.passengers}/${bus.capacity || 50}`,
           `Status: ${bus.status}`,
+          `Last GPS update: ${bus.lastLocationAt ? new Date(bus.lastLocationAt).toLocaleTimeString() : 'unknown'}`,
           `ETA source: ${etaMinutes ? 'backend' : 'regression fallback'}`
         ]
       };

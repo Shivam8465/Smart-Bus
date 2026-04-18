@@ -71,6 +71,10 @@ const busSchema = new mongoose.Schema(
     lastBreakAt: {
       type: Date,
       default: null
+    },
+    lastLocationAt: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }
