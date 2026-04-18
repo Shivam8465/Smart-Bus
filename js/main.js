@@ -380,7 +380,7 @@ const timePeriodNum = {
 
   // Get average passengers from historical data
   const routeRecords = HISTORICAL_DATA.filter(
-    d => d.route === route && d.timePeriod === timePeriod
+    d => d.route === route && d.timePeriod === resolvedPeriod
   );
   const passengers = routeRecords.length > 0
     ? Math.round(

@@ -83,16 +83,20 @@ async function seedRoutes() {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('MongoDB connected');
 
-    await Route.deleteMany();
-    console.log('Existing routes cleared');
-
     const records = routes.map((route) => ({
       ...route,
       totalStops: route.stops.length
     }));
 
-    await Route.insertMany(records);
-    console.log(`${records.length} routes added successfully`);
+    for (const route of records) {
+      await Route.updateOne(
+        { routeId: route.routeId },
+        { $set: route },
+        { upsert: true }
+      );
+    }
+
+    console.log(`${records.length} seed routes upserted (custom routes preserved)`);
 
     await mongoose.connection.close();
     console.log('Done. Connection closed.');

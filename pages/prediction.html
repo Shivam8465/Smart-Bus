@@ -613,18 +613,11 @@ loadLivePredictions();
   }
 
   async function loadRoutesForPrediction() {
-    const token = localStorage.getItem('sbf_token');
-    if (!token) {
-      populateRouteDropdownFallback();
-      return;
-    }
-
     try {
       const response = await fetch(`${API_BASE_URL}/routes`, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         }
       });
 

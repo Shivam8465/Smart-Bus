@@ -27,13 +27,14 @@ const seedDB = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('MongoDB connected');
 
-    // Delete existing buses
-    await Bus.deleteMany();
-    console.log('Existing buses cleared');
-
-    // Insert all buses
-    await Bus.insertMany(buses);
-    console.log('15 buses added successfully');
+    for (const bus of buses) {
+      await Bus.updateOne(
+        { busId: bus.busId },
+        { $set: bus },
+        { upsert: true }
+      );
+    }
+    console.log('Seed buses upserted (custom buses preserved)');
 
     mongoose.connection.close();
     console.log('Done. Connection closed.');

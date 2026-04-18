@@ -6,7 +6,7 @@ const protect        = authMiddleware.protect;
 const authorizeRole  = authMiddleware.authorizeRole;
 
 // ── GET ALL ROUTES (everyone can see) ──
-router.get('/', protect, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const routes = await Route.find();
     res.status(200).json({
@@ -23,7 +23,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // ── GET SINGLE ROUTE ──
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const route = await Route.findOne({ routeId: req.params.id });
     if (!route) {
