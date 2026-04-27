@@ -118,9 +118,9 @@
       <div class="breadcrumb">Home / <span>Passenger</span></div>
     </div>
 
-    <!-- Service Alert -->
-    <div class="notice-banner fade-in-d1">
-      ⚠️ Route 08C experiencing delays of ~8 min due to road works on East Avenue.
+    <!-- Service Alert (Dynamic) -->
+    <div id="service-alert-banner" class="notice-banner fade-in-d1" style="display:none;">
+      <!-- Filled by JS -->
     </div>
 
     <!-- ── SEARCH SECTION ── -->
@@ -139,11 +139,7 @@
         <div class="form-group" style="max-width:180px">
           <label class="form-label">Nearest Stop</label>
           <select class="form-select" id="stop-select">
-            <option>Main Street</option>
-            <option>Park Avenue</option>
-            <option>Central Station</option>
-            <option>Tech Park</option>
-            <option>North Gate</option>
+            <option value="">— Any Stop —</option>
           </select>
         </div>
         <button class="btn-primary" onclick="runSearch()" style="padding:11px 24px;white-space:nowrap">Search</button>
@@ -335,12 +331,120 @@ if (currentUser) {
     pageHeader.textContent = `Welcome, ${currentUser.name}`;
   }
 }
- async function runSearch() {
+
+window.allRoutes = [];
+window.allBuses = [];
+
+async function fetchStopsAndPopulate() {
+  try {
+    const token = localStorage.getItem('sbf_token');
+    const response = await fetch(`${API_BASE_URL}/routes`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+    const data = await response.json();
+    if (response.ok) {
+      window.allRoutes = data.routes;
+    } else {
+      throw new Error('API failed');
+    }
+  } catch (error) {
+    console.log('Using dummy routes');
+    window.allRoutes = DUMMY.routes.map(r => {
+      // Map DUMMY.routes to include stops from ROUTE_STOPS if available
+      const routeCode = r.id.replace('RT-', '');
+      return { ...r, routeId: r.id, stops: ROUTE_STOPS[routeCode] || [] };
+    });
+  }
+
+  let uniqueStops = new Set();
+  window.allRoutes.forEach(r => {
+    if (r.stops) r.stops.forEach(s => uniqueStops.add(s.name));
+  });
+
+  const stopSelect = document.getElementById('stop-select');
+  if (uniqueStops.size > 0) {
+    stopSelect.innerHTML = '<option value="">— Any Stop —</option>' + 
+      Array.from(uniqueStops).map(s => `<option value="${s}">${s}</option>`).join('');
+  }
+
+  // Populate Nearby Stops
+  const nearbyStopsArr = Array.from(uniqueStops).slice(0, 3);
+  const nearbyGrid = document.querySelector('#nearby .grid-3');
+  if (nearbyGrid && nearbyStopsArr.length > 0) {
+    nearbyGrid.innerHTML = nearbyStopsArr.map(s => `
+      <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--amber)'" onmouseout="this.style.borderColor='var(--border)'" onclick="selectStopAndSearch('${s}')">
+        <div class="font-mono text-amber" style="font-size:0.85rem;margin-bottom:4px;">🚏 ${s}</div>
+        <div class="text-xs text-muted">Nearby · Click to search</div>
+      </div>
+    `).join('');
+  }
+}
+
+window.selectStopAndSearch = function(stop) {
+  document.getElementById('stop-select').value = stop;
+  runSearch();
+};
+
+function getBusDetailsForStop(bus, selectedStopName) {
+  let etaStr = bus.eta || '—';
+  let pax = bus.passengers || 0;
+  let cap = bus.capacity || 50;
+
+  if (bus.status === 'Off Duty') return { eta: '—', passengers: pax, capacity: cap };
+  
+  const routeCode = (bus.route || '').trim().toUpperCase().replace(/^RT-/, '');
+  const route = window.allRoutes.find(r => 
+    (r.routeId || '').includes(routeCode) || 
+    (r.name && r.name.toUpperCase().includes(routeCode))
+  );
+  
+  const norm = s => (s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(' stop', '');
+  
+  if (!route || !route.stops || route.stops.length === 0) return { eta: etaStr, passengers: pax, capacity: cap };
+  
+  let currentStopIndex = route.stops.findIndex(s => norm(s.name) === norm(bus.currentStop));
+  if (currentStopIndex === -1) currentStopIndex = 0; // Assume start of route if unknown
+
+  let targetStopIndex = -1;
+  if (selectedStopName) {
+    targetStopIndex = route.stops.findIndex(s => 
+      norm(s.name).includes(norm(selectedStopName)) || 
+      norm(selectedStopName).includes(norm(s.name))
+    );
+    if (targetStopIndex === -1) return { eta: 'Not on route', passengers: pax, capacity: cap };
+  } else {
+    // If no stop selected, just estimate to the end of the route
+    targetStopIndex = route.stops.length - 1;
+  }
+  
+  if (currentStopIndex > targetStopIndex && selectedStopName) return { eta: 'Passed', passengers: pax, capacity: cap };
+  if (currentStopIndex === targetStopIndex && selectedStopName) return { eta: 'Arriving', passengers: pax, capacity: cap };
+  
+  const remainingStops = targetStopIndex - currentStopIndex;
+  const baseMinutes = Math.max(2, remainingStops * 3);
+
+  // Simulate passenger changes per stop deterministicly so it varies dynamically by stop
+  let simulatedPax = pax;
+  let seed = (bus.busId || bus.id || 'A').charCodeAt(0);
+  for (let i = currentStopIndex + 1; i <= targetStopIndex; i++) {
+    const change = (seed + i * 7) % 9 - 3; // -3 to +5 people per stop
+    simulatedPax += change;
+  }
+  simulatedPax = Math.max(0, Math.min(cap, simulatedPax));
+  
+  const occupancy = simulatedPax / cap;
+  const occupancyPenalty = occupancy > 0.85 ? 3 : occupancy > 0.65 ? 2 : occupancy > 0.45 ? 1 : 0;
+  const statusPenalty = bus.status === 'Delayed' ? 5 : bus.status === 'At Stop' ? 1 : 0;
+  
+  const etaMinutes = Math.min(45, Math.max(2, Math.round(baseMinutes + occupancyPenalty + statusPenalty)));
+  return { eta: `${etaMinutes} min`, passengers: simulatedPax, capacity: cap };
+}
+
+async function runSearch() {
   const input       = document.getElementById('route-search').value.trim().toUpperCase();
   const selectedStop = document.getElementById('stop-select').value;
   const container   = document.getElementById('search-results');
 
-  // Show loading state
   container.innerHTML = `
     <div style="text-align:center;padding:30px;
                 color:var(--text-muted);font-family:var(--font-mono);">
@@ -363,29 +467,168 @@ if (currentUser) {
       throw new Error('API failed');
     }
 
-    // Filter by route if input provided
     let buses = data.buses;
+    
+    // Check for delayed buses and show service alert
+    const delayedBuses = buses.filter(b => b.status === 'Delayed');
+    const alertBanner = document.getElementById('service-alert-banner');
+    if (delayedBuses.length > 0) {
+      const routes = [...new Set(delayedBuses.map(b => b.route))].join(', ');
+      alertBanner.innerHTML = `⚠️ Routes ${routes} are currently experiencing delays.`;
+      alertBanner.style.display = 'flex';
+    } else {
+      alertBanner.style.display = 'none';
+    }
     if (input) {
       buses = buses.filter(bus =>
-        bus.route.toUpperCase().includes(input) ||
-        bus.busId.toUpperCase().includes(input)
+        (bus.route || '').toUpperCase().includes(input) ||
+        (bus.busId || '').toUpperCase().includes(input)
       );
     }
+    
+    if (selectedStop) {
+      buses = buses.filter(bus => {
+        const details = getBusDetailsForStop(bus, selectedStop);
+        return details.eta !== 'Not on route';
+      });
+    }
 
+    window.allBuses = buses;
     displaySearchResults(buses, selectedStop);
+    updateCrowdForecast(buses, selectedStop);
+    if (buses.length > 0) updateLiveMap(buses[0].busId);
 
   } catch (error) {
-    // Fallback to dummy data
     console.log('Backend not available. Using dummy data.');
-    const filtered = input
+    let filtered = input
       ? DUMMY.buses.filter(bus =>
-          bus.route.toUpperCase().includes(input) ||
-          bus.id.toUpperCase().includes(input)
+          (bus.route || '').toUpperCase().includes(input) ||
+          (bus.id || '').toUpperCase().includes(input)
         )
       : DUMMY.buses;
+      
+    if (selectedStop) {
+      filtered = filtered.filter(bus => {
+        const details = getBusDetailsForStop(bus, selectedStop);
+        return details.eta !== 'Not on route';
+      });
+    }
+    
+    window.allBuses = filtered;
     displaySearchResults(filtered, selectedStop);
+    updateCrowdForecast(filtered, selectedStop);
+    if (filtered.length > 0) updateLiveMap(filtered[0].id || filtered[0].busId);
   }
 }
+
+window.updateLiveMap = function(busId) {
+  const bus = window.allBuses.find(b => b.busId === busId || b.id === busId);
+  if (!bus) return;
+
+  const mapSection = document.getElementById('map');
+  
+  // Generate deterministic mock GPS based on bus ID and route
+  let seed = 0;
+  const str = (bus.route || '') + (bus.busId || bus.id || '');
+  for(let i=0; i<str.length; i++) seed += str.charCodeAt(i);
+  
+  const routeCode = (bus.route || '').trim().toUpperCase().replace(/^RT-/, '');
+  const route = window.allRoutes.find(r => r.routeId && r.routeId.includes(routeCode));
+  const norm = s => (s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(' stop', '');
+  let stopIndex = route && route.stops ? route.stops.findIndex(s => norm(s.name) === norm(bus.currentStop)) : 0;
+  if (stopIndex < 0) stopIndex = 0;
+
+  const latBase = 28.6139; // Delhi center
+  const lngBase = 77.2090;
+  
+  const lat = bus.latitude || (latBase + (seed % 100) * 0.0005 + stopIndex * 0.001).toFixed(4);
+  const lng = bus.longitude || (lngBase + ((seed * 3) % 100) * 0.0005 + stopIndex * 0.001).toFixed(4);
+  const speed = bus.status === 'On Route' ? 25 + (seed % 15) : 0;
+
+  mapSection.innerHTML = `
+    <div class="card-header">
+      <div class="flex items-center gap-12">
+        <div class="card-icon icon-teal">📍</div>
+        <h3>Live Bus Location</h3>
+      </div>
+      <span class="badge badge-green">Live</span>
+    </div>
+    <div class="map-placeholder" style="position:relative;background:#1e2025;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:12px;">
+      <div style="position:absolute;width:100%;height:100%;background-image:radial-gradient(rgba(0,212,180,0.1) 1px, transparent 1px);background-size:20px 20px;"></div>
+      <div class="map-dot" style="position:absolute;z-index:2;"></div>
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);width:120px;height:120px;background:radial-gradient(circle, rgba(0,212,180,0.2) 0%, transparent 70%);border-radius:50%;animation:pulse 2s infinite;"></div>
+      <span class="map-label" style="position:absolute;bottom:20px;background:var(--bg-surface);padding:8px 16px;border-radius:20px;font-family:var(--font-mono);font-size:0.85rem;border:1px solid var(--border);z-index:3;">Route ${bus.route} — ${bus.currentStop || 'On Route'}</span>
+    </div>
+    <div class="flex items-center justify-between mt-16 text-sm">
+      <span class="text-secondary">Bus ID: <span class="font-mono text-teal">${bus.busId || bus.id}</span></span>
+      <span class="text-secondary">Speed: <span class="font-mono text-amber">${speed} km/h</span></span>
+      <span class="text-secondary">GPS: <span class="font-mono" style="color:var(--text-muted)">${lat}°N, ${lng}°E</span></span>
+    </div>
+  `;
+};
+
+function updateCrowdForecast(buses, stop) {
+  const crowdSection = document.querySelector('.grid-2 .card:nth-child(2)');
+  
+  // Filter buses heading to this stop
+  const incomingBuses = buses.map(bus => {
+    return { bus, details: getBusDetailsForStop(bus, stop) };
+  }).filter(item => {
+    return item.details.eta !== 'Passed' && item.details.eta !== '—';
+  }).slice(0, 3); // top 3
+
+  if (incomingBuses.length === 0) {
+    crowdSection.innerHTML = `
+      <div class="card-header">
+        <div class="flex items-center gap-12">
+          <div class="card-icon icon-amber">👥</div>
+          <h3>Crowd Forecast</h3>
+        </div>
+      </div>
+      <p class="text-secondary text-sm mb-20">No upcoming buses to show for this stop.</p>
+    `;
+    return;
+  }
+
+  const listHtml = incomingBuses.map(item => {
+    const bus = item.bus;
+    const { passengers, capacity, eta } = item.details;
+    const pct        = Math.round((passengers / capacity) * 100);
+    const crowdLevel = pct > 75 ? 'high' : pct > 45 ? 'medium' : 'low';
+    const crowdLabel = crowdLevel.toUpperCase();
+    const badgeClass = crowdLevel === 'high' ? 'badge-red' : crowdLevel === 'medium' ? 'badge-amber' : 'badge-green';
+    const barColor   = crowdLevel === 'high' ? 'var(--red)' : crowdLevel === 'medium' ? 'var(--amber)' : '#00d464';
+
+    return `
+      <div>
+        <div class="flex justify-between mb-8">
+          <span class="text-secondary text-sm">Route ${bus.route} — ${eta}</span>
+          <span class="badge ${badgeClass}">${crowdLabel}</span>
+        </div>
+        <div class="crowd-bar-track" style="height:12px;">
+          <div class="crowd-bar-fill" style="background:${barColor};width:${pct}%;height:100%;border-radius:4px;"></div>
+        </div>
+        <div class="flex justify-between mt-8 text-xs font-mono text-muted">
+          <span>${passengers} / ${capacity} seats</span><span>${pct}%</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  crowdSection.innerHTML = `
+    <div class="card-header">
+      <div class="flex items-center gap-12">
+        <div class="card-icon icon-amber">👥</div>
+        <h3>Crowd Forecast</h3>
+      </div>
+    </div>
+    <p class="text-secondary text-sm mb-20">Predicted occupancy for upcoming buses at ${stop}.</p>
+    <div class="flex-col gap-20">
+      ${listHtml}
+    </div>
+  `;
+}
+
 function displaySearchResults(results, stop) {
   const container = document.getElementById('search-results');
 
@@ -400,16 +643,18 @@ function displaySearchResults(results, stop) {
   }
 
   const rows = results.map(bus => {
-    // Handle both MongoDB format and dummy data format
-    const busId      = bus.busId    || bus.id;
-    const passengers = bus.passengers || 0;
-    const capacity   = bus.capacity   || 50;
+    const busId      = bus.busId || bus.id;
+    const details    = getBusDetailsForStop(bus, stop);
+    const passengers = details.passengers;
+    const capacity   = details.capacity;
     const pct        = Math.round((passengers / capacity) * 100);
     const crowdLevel = pct > 75 ? 'high' : pct > 45 ? 'medium' : 'low';
     const crowdLabel = crowdLevel.toUpperCase();
-    const etaColor   = bus.status === 'Delayed' ? 'color:var(--red)' : 'color:var(--teal)';
-    const etaWarning = bus.status === 'Delayed' ? ' ⚠️' : '';
-    const eta        = bus.eta || '—';
+    
+    // Calculate accurate dynamic ETA for the selected stop
+    const eta        = details.eta;
+    const etaColor   = eta === 'Passed' ? 'color:var(--text-muted)' : (bus.status === 'Delayed' ? 'color:var(--red)' : 'color:var(--teal)');
+    const etaWarning = bus.status === 'Delayed' && eta !== 'Passed' ? ' ⚠️' : '';
 
     return `
       <div class="bus-result-row fade-in">
@@ -429,16 +674,14 @@ function displaySearchResults(results, stop) {
           </div>
           <span class="crowd-value">${crowdLabel}</span>
         </div>
-        <button class="fav-btn">⭐ Save</button>
+        <button class="fav-btn" onclick="updateLiveMap('${busId}')" style="background:var(--bg-surface);color:var(--teal);border-color:var(--teal);">📍 Track</button>
       </div>`;
   }).join('');
 
   container.innerHTML = `
     <div class="result-header">
       <span class="text-secondary text-sm font-mono">
-        Results: <strong class="text-amber">
-          ${results.length} bus(es) found
-        </strong>
+        Showing arrivals at: <strong class="text-amber">${stop}</strong>
       </span>
       <span class="badge badge-green">Live Data</span>
     </div>
@@ -454,8 +697,10 @@ function displaySearchResults(results, stop) {
     </div>
     ${rows}`;
 }
+
 // Load all buses when page opens
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  await fetchStopsAndPopulate();
   runSearch();
 });
 </script>

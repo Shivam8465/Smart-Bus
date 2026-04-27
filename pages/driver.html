@@ -158,7 +158,7 @@
         <div>
           <div class="text-xs font-mono text-muted mb-8">ACTIVE ROUTE</div>
           <div class="big-route-tag">42A</div>
-          <div class="text-secondary" style="font-size:0.9rem;margin-top:4px;">City Centre → Airport Terminal</div>
+          <div id="route-name-desc" class="text-secondary" style="font-size:0.9rem;margin-top:4px;">City Centre → Airport Terminal</div>
         </div>
         <div style="text-align:right">
           <div class="text-xs font-mono text-muted mb-8">BUS ID</div>
@@ -169,15 +169,15 @@
       <div class="grid-2">
         <div>
           <div class="text-xs font-mono text-muted mb-8">NEXT STOP</div>
-          <div style="color:var(--text-primary);font-weight:600;">Park Avenue Stop</div>
-          <div class="text-xs font-mono text-muted mt-4">ETA: ~3 min</div>
+          <div id="next-stop-name" style="color:var(--text-primary);font-weight:600;">Park Avenue Stop</div>
+          <div id="next-stop-eta" class="text-xs font-mono text-muted mt-4">ETA: ~3 min</div>
         </div>
         <div>
           <div class="text-xs font-mono text-muted mb-8">TRIP PROGRESS</div>
           <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;">
-            <div style="height:100%;width:42%;background:var(--teal);border-radius:4px;"></div>
+            <div id="trip-progress-bar" style="height:100%;width:42%;background:var(--teal);border-radius:4px;transition:width 0.3s;"></div>
           </div>
-          <div class="text-xs font-mono text-muted mt-4">Stop 5 of 12</div>
+          <div id="trip-progress-text" class="text-xs font-mono text-muted mt-4">Stop 5 of 12</div>
         </div>
       </div>
     </section>
@@ -229,7 +229,7 @@
             <div class="card-icon icon-amber">👥</div>
             <h3>Passenger Count</h3>
           </div>
-          <span class="badge badge-amber">MEDIUM</span>
+          <span id="pax-badge-header" class="badge badge-amber">MEDIUM</span>
         </div>
         <div style="text-align:center;padding:24px 0;">
           <div class="text-xs font-mono text-muted mb-16">CURRENT OCCUPANCY</div>
@@ -248,8 +248,8 @@
         <div class="form-group mb-16">
           <label class="form-label">Board / Alight at Stop</label>
           <div class="input-row">
-            <input type="number" class="form-input" placeholder="Boarded" min="0" />
-            <input type="number" class="form-input" placeholder="Alighted" min="0" />
+            <input type="number" id="boarded-input" class="form-input" placeholder="Boarded" min="0" />
+            <input type="number" id="alighted-input" class="form-input" placeholder="Alighted" min="0" />
           </div>
         </div>
         <button class="btn-primary w-full" onclick="submitPassengerCount()">
@@ -339,27 +339,7 @@ const busCapacity = 50;
 
 function changeCount(delta) {
   paxCount = Math.max(0, Math.min(currentBusCapacity, paxCount + delta));
-  document.getElementById('pax-count').textContent = paxCount;
-
-  const pct = (paxCount / currentBusCapacity) * 100;
-  const bar = document.getElementById('pax-bar');
-  const lbl = document.getElementById('pax-label');
-
-  if (pct < 50) {
-    bar.style.background  = '#00d464';
-    lbl.className         = 'badge badge-green';
-    lbl.textContent       = 'LOW';
-  } else if (pct < 80) {
-    bar.style.background  = 'var(--amber)';
-    lbl.className         = 'badge badge-amber';
-    lbl.textContent       = 'MEDIUM';
-  } else {
-    bar.style.background  = 'var(--red)';
-    lbl.className         = 'badge badge-red';
-    lbl.textContent       = 'HIGH';
-  }
-
-  document.getElementById('pax-bar').style.width = pct + '%';
+  updatePassengerVisuals();
 }
 
 // ── LOAD DRIVER BUS FROM MONGODB ──
@@ -372,18 +352,32 @@ function updatePassengerVisuals() {
   const bar = document.getElementById('pax-bar');
   const lbl = document.getElementById('pax-label');
 
+  const headerBadge = document.getElementById('pax-badge-header');
+
   if (pct < 50) {
     bar.style.background = '#00d464';
     lbl.className = 'badge badge-green';
     lbl.textContent = 'LOW';
+    if (headerBadge) {
+      headerBadge.className = 'badge badge-green';
+      headerBadge.textContent = 'LOW';
+    }
   } else if (pct < 80) {
     bar.style.background = 'var(--amber)';
     lbl.className = 'badge badge-amber';
     lbl.textContent = 'MEDIUM';
+    if (headerBadge) {
+      headerBadge.className = 'badge badge-amber';
+      headerBadge.textContent = 'MEDIUM';
+    }
   } else {
     bar.style.background = 'var(--red)';
     lbl.className = 'badge badge-red';
     lbl.textContent = 'HIGH';
+    if (headerBadge) {
+      headerBadge.className = 'badge badge-red';
+      headerBadge.textContent = 'HIGH';
+    }
   }
 
   bar.style.width = pct + '%';
@@ -417,6 +411,32 @@ function renderRouteTimeline(stops, currentStop) {
       const normalized = normalizeStopName(stop.name);
       return normalized.includes(normalizedCurrent) || normalizedCurrent.includes(normalized);
     });
+  }
+
+  // Update Trip Progress UI
+  const currentNum = currentIndex >= 0 ? currentIndex + 1 : 0;
+  const totalStops = stops.length;
+  const pct = Math.min(100, Math.max(0, (currentNum / totalStops) * 100));
+  
+  const bar = document.getElementById('trip-progress-bar');
+  const text = document.getElementById('trip-progress-text');
+  if (bar) bar.style.width = pct + '%';
+  if (text) text.textContent = `Stop ${currentNum} of ${totalStops}`;
+
+  // Update Next Stop UI
+  const nextNameEl = document.getElementById('next-stop-name');
+  const nextEtaEl = document.getElementById('next-stop-eta');
+  if (currentIndex >= 0 && currentIndex + 1 < totalStops) {
+    if (nextNameEl) nextNameEl.textContent = stops[currentIndex + 1].name;
+    
+    // Dynamic calculation for next stop ETA based on current passenger load
+    const baseStopMins = 3;
+    const dwellPenalty = paxCount > 40 ? 2 : paxCount > 20 ? 1 : 0;
+    const nextEtaMins = baseStopMins + dwellPenalty;
+    if (nextEtaEl) nextEtaEl.textContent = `ETA: ~${nextEtaMins} min`;
+  } else {
+    if (nextNameEl) nextNameEl.textContent = 'End of Route';
+    if (nextEtaEl) nextEtaEl.textContent = '-';
   }
 
   timeline.innerHTML = stops.map((stop, index) => {
@@ -465,8 +485,10 @@ async function loadRouteDetails(routeCode, currentStop) {
 
     const titleEl = document.getElementById('route-timeline-title');
     const tagEl = document.getElementById('route-timeline-tag');
+    const descEl = document.getElementById('route-name-desc');
     if (titleEl) titleEl.textContent = `Route ${normalizedRoute} — Stop Timeline`;
     if (tagEl) tagEl.textContent = `${normalizedRoute} · ${currentRouteStops.length} stops`;
+    if (descEl && route.name) descEl.textContent = route.name;
 
     populateStopDropdown(currentRouteStops, currentStop);
     renderRouteTimeline(currentRouteStops, currentStop || currentRouteStops[0].name);
@@ -515,6 +537,8 @@ async function loadDriverBus() {
         const stopSelect = document.getElementById('current-stop-select');
         if (stopSelect) stopSelect.value = driverBus.currentStop;
         updateStopTimeline(driverBus.currentStop);
+        const mapLabel = document.querySelector('.map-label');
+        if (mapLabel) mapLabel.textContent = `Current: ${driverBus.currentStop}`;
       }
 
       console.log(`Driver bus loaded: ${driverBus.busId} on route ${driverBus.route}`);
@@ -564,6 +588,8 @@ async function handleLocationUpdate() {
 
     alert(`✅ Location updated: ${stop}`);
     updateStopTimeline(stop);
+    const mapLabel = document.querySelector('.map-label');
+    if (mapLabel) mapLabel.textContent = `Current: ${stop}`;
 
   } catch (error) {
     alert('Location broadcast failed. Check connection.');
@@ -575,6 +601,19 @@ async function submitPassengerCount() {
   if (!driverBusId) {
     alert('No bus assigned to you yet.');
     return;
+  }
+
+  const boardedEl = document.getElementById('boarded-input');
+  const alightedEl = document.getElementById('alighted-input');
+  
+  const boarded = parseInt(boardedEl.value) || 0;
+  const alighted = parseInt(alightedEl.value) || 0;
+  
+  if (boarded > 0 || alighted > 0) {
+    paxCount = Math.max(0, Math.min(currentBusCapacity, paxCount + boarded - alighted));
+    updatePassengerVisuals();
+    boardedEl.value = '';
+    alightedEl.value = '';
   }
 
   try {

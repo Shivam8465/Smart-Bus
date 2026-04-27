@@ -83,14 +83,30 @@ router.post('/', protect, authorizeRole('admin'), async (req, res) => {
 // ── UPDATE ROUTE (Admin only) ──
 router.put('/:id', protect, authorizeRole('admin'), async (req, res) => {
   try {
+    // Check if we need to cascade a route ID change to buses
+    const oldId = req.params.id;
+    const newId = req.body.routeId;
+    const isIdChange = newId && newId !== oldId;
     const route = await Route.findOneAndUpdate(
       { routeId: req.params.id },
       req.body,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!route) {
       return res.status(404).json({ message: 'Route not found' });
+    }
+
+    // Cascade update to buses if the ID changed
+    if (isIdChange) {
+      const Bus = require('../models/Bus');
+      const oldRouteCode = oldId.toUpperCase().replace(/^RT-/, '');
+      const newRouteCode = newId.toUpperCase().replace(/^RT-/, '');
+      
+      await Bus.updateMany(
+        { route: new RegExp(`^${oldRouteCode}$`, 'i') }, 
+        { route: newRouteCode }
+      );
     }
 
     res.status(200).json({

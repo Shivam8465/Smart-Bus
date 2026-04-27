@@ -56,6 +56,28 @@ async function calculateBusEta(busLike) {
   return `${etaMinutes} min`;
 }
 
+async function validateRouteAssignment(routeInput) {
+  const input = (routeInput || '').trim();
+  if (!input || input.toLowerCase() === 'unassigned' || input.toLowerCase() === 'none') {
+    return { ok: true, normalizedRoute: 'Unassigned' };
+  }
+
+  const routeCode = normalizeRouteCode(input);
+  const routeDoc = await Route.findOne({
+    $or: [
+      { routeId: `RT-${routeCode}` },
+      { routeId: routeCode },
+      { name: new RegExp(`^${routeCode}`, 'i') }
+    ]
+  });
+
+  if (!routeDoc) {
+    return { ok: false, status: 400, message: `Route '${input}' does not exist. Please use a valid route.` };
+  }
+
+  return { ok: true, normalizedRoute: normalizeRouteCode(routeDoc.routeId) };
+}
+
 async function validateDriverAssignment(driverName, busIdToIgnore = null) {
   const normalizedDriver = normalizeName(driverName || '');
   if (!normalizedDriver) {
@@ -93,14 +115,33 @@ async function validateDriverAssignment(driverName, busIdToIgnore = null) {
   return { ok: true, normalizedName: matchingDriver.name };
 }
 
-// ── GET ALL BUSES (Passenger and Admin can see) ──
-router.get('/', protect, async (req, res) => {
+// ── GET ALL BUSES (Public, Passenger and Admin can see) ──
+router.get('/', async (req, res) => {
   try {
     const buses = await Bus.find();
+    
+    // Find unassigned drivers and append them as virtual buses
+    const drivers = await User.find({ role: 'driver' });
+    const assignedDriverNames = new Set(buses.map(b => normalizeName(b.driver)));
+    
+    const unassignedDrivers = drivers.filter(d => !assignedDriverNames.has(normalizeName(d.name)));
+    const virtualBuses = unassignedDrivers.map(d => ({
+      busId: `UNASSIGNED-${d._id}`,
+      route: 'None',
+      driver: d.name,
+      status: 'Off Duty',
+      passengers: 0,
+      capacity: 50,
+      eta: '—',
+      isVirtual: true
+    }));
+
+    const combined = [...buses, ...virtualBuses];
+
     res.status(200).json({
       message: 'Buses fetched successfully',
-      count:   buses.length,
-      buses
+      count:   combined.length,
+      buses:   combined
     });
   } catch (error) {
     res.status(500).json({ 
@@ -177,9 +218,14 @@ router.post('/', protect, authorizeRole('admin'), async (req, res) => {
       return res.status(driverValidation.status).json({ message: driverValidation.message });
     }
 
+    const routeValidation = await validateRouteAssignment(route);
+    if (!routeValidation.ok) {
+      return res.status(routeValidation.status).json({ message: routeValidation.message });
+    }
+
     const newBus = new Bus({
       busId,
-      route,
+      route: routeValidation.normalizedRoute,
       driver: driverValidation.normalizedName,
       capacity: capacity || 50
     });
@@ -215,12 +261,17 @@ router.put('/:id', protect, authorizeRole('admin'), async (req, res) => {
       return res.status(driverValidation.status).json({ message: driverValidation.message });
     }
     merged.driver = driverValidation.normalizedName;
+    const routeValidation = await validateRouteAssignment(req.body.route || existingBus.route);
+    if (!routeValidation.ok) {
+      return res.status(routeValidation.status).json({ message: routeValidation.message });
+    }
+    merged.route = routeValidation.normalizedRoute;
     const eta = await calculateBusEta(merged);
 
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
-      { ...req.body, driver: driverValidation.normalizedName, eta },
-      { new: true }
+      { ...req.body, driver: driverValidation.normalizedName, route: routeValidation.normalizedRoute, eta },
+      { returnDocument: 'after' }
     );
 
     res.status(200).json({
@@ -260,7 +311,7 @@ router.patch('/:id/location', protect, authorizeRole('driver'), async (req, res)
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
       updates,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.status(200).json({
@@ -282,7 +333,7 @@ router.patch('/:id/break', protect, authorizeRole('driver'), async (req, res) =>
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
       { status: 'At Stop', lastBreakAt: new Date() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!bus) {
@@ -317,7 +368,7 @@ router.post('/:id/incidents', protect, authorizeRole('driver'), async (req, res)
         },
         status: 'Delayed'
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!bus) {
@@ -342,7 +393,7 @@ router.patch('/:id/end-trip', protect, authorizeRole('driver'), async (req, res)
     const bus = await Bus.findOneAndUpdate(
       { busId: req.params.id },
       { status: 'Off Duty', passengers: 0 },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!bus) {
@@ -364,6 +415,17 @@ router.patch('/:id/end-trip', protect, authorizeRole('driver'), async (req, res)
 // ── DELETE BUS (Admin only) ──
 router.delete('/:id', protect, authorizeRole('admin'), async (req, res) => {
   try {
+    if (req.params.id.startsWith('UNASSIGNED-')) {
+      const userId = req.params.id.replace('UNASSIGNED-', '');
+      const user = await User.findByIdAndDelete(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'Driver account not found' });
+      }
+      return res.status(200).json({
+        message: `Driver account ${user.name} deleted successfully`
+      });
+    }
+
     const bus = await Bus.findOneAndDelete({ busId: req.params.id });
 
     if (!bus) {

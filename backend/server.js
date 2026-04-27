@@ -49,6 +49,15 @@ try {
 } catch (error) {
   console.log('Error loading route routes:', error.message);
 }
+
+// Prediction routes
+try {
+  const predictionRoutes = require('./routes/predictions');
+  app.use('/api/predictions', predictionRoutes);
+  console.log('Prediction routes loaded successfully');
+} catch (error) {
+  console.log('Error loading prediction routes:', error.message);
+}
 const authMiddleware = require('./middleware/auth');
 const protect = authMiddleware.protect;
 app.get('/api/protected', protect, (req, res) => {
@@ -69,6 +78,16 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const regression = require('./ml/regression');
+regression.initModel().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log('ML Model initialized and ready.');
+  });
+}).catch(err => {
+  console.error('Failed to initialize ML model:', err);
+  // Start server anyway
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} (without ML model)`);
+  });
 });

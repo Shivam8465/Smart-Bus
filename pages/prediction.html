@@ -444,7 +444,7 @@ updateNavbar();
   }).join('');
 }
 
-function runPrediction() {
+async function runPrediction() {
   const route      = document.getElementById('sel-route').value;
   const stopName   = document.getElementById('sel-stop').value;
   const timeSelect = document.getElementById('sel-time').value;
@@ -459,18 +459,27 @@ function runPrediction() {
   const timePeriod = timePeriodMap[timeSelect] || 'now';
 
   document.querySelector('#results-area h3').textContent =
-    route ? `Regression Prediction — Route ${route}` :
-            'Regression Predictions — All Routes';
+    route ? `ML Prediction — Route ${route}` :
+            'ML Predictions — All Routes';
 
-  if (route) {
-    const result = predictWithRegression(route, timePeriod, stopName);
-    renderResults([result]);
-  } else {
-    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
-    const results   = allRoutes.map(r =>
-      predictWithRegression(r, timePeriod, null)
-    );
-    renderResults(results);
+  document.getElementById('results-grid').innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 2rem;">Loading predictions from ML Backend...</div>';
+
+  try {
+    if (route) {
+      const response = await fetch(`${API_BASE_URL}/predictions?route=${route}&timePeriod=${timePeriod}&stopName=${stopName}`);
+      const result = await response.json();
+      if (result.success) renderResults([result.data]);
+      else throw new Error('Prediction failed');
+    } else {
+      const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
+      const promises = allRoutes.map(r => fetch(`${API_BASE_URL}/predictions?route=${r}&timePeriod=${timePeriod}`).then(res => res.json()));
+      const results = await Promise.all(promises);
+      const validData = results.filter(r => r.success).map(r => r.data);
+      renderResults(validData);
+    }
+  } catch (error) {
+    console.error('Error fetching prediction:', error);
+    document.getElementById('results-grid').innerHTML = '<div style="grid-column: 1/-1; color: red;">Failed to load predictions. Ensure backend is running.</div>';
   }
 }
 function parseEtaMinutes(etaText) {
@@ -480,90 +489,79 @@ function parseEtaMinutes(etaText) {
 }
 
 async function loadLivePredictions() {
-  const token = localStorage.getItem('sbf_token');
-  if (!token) {
-    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
-    const initialResults = allRoutes.map((r) => predictWithRegression(r, 'now', null));
-    renderResults(initialResults);
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/buses`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Buses load failed');
-
-    const buses = (data.buses || []).filter((bus) => bus.status !== 'Off Duty');
-    const liveResults = buses.map((bus) => {
-      const occupancyPct = Math.min(100, Math.max(0, Math.round((bus.passengers / (bus.capacity || 50)) * 100)));
-      const crowdLevel = occupancyPct > 75 ? 'high' : occupancyPct > 45 ? 'medium' : 'low';
-      const etaMinutes = parseEtaMinutes(bus.eta);
-      const fallback = predictWithRegression(bus.route, 'now', bus.currentStop || null);
-      const arrivalTime = etaMinutes || fallback.arrivalTime;
-      // Confidence is a heuristic (not hardcoded per route):
-      // varies by GPS freshness, ETA availability, occupancy, incidents, and delay state.
-      const now = Date.now();
-      const last = bus.lastLocationAt ? new Date(bus.lastLocationAt).getTime() : null;
-      const minsSinceUpdate = last ? Math.round((now - last) / 60000) : null;
-      const freshBonus = minsSinceUpdate === null ? 0 : Math.max(0, 10 - Math.min(10, minsSinceUpdate * 2)); // 0..10
-      const etaBonus = etaMinutes ? 12 : 4;
-      const stopBonus = bus.currentStop ? 4 : 0;
-      const delayPenalty = bus.status === 'Delayed' ? -18 : 0;
-      const incidentsCount = Array.isArray(bus.incidents) ? bus.incidents.length : 0;
-      const incidentPenalty = Math.min(12, incidentsCount * 3) * -1;
-      const occupancyPenalty = occupancyPct > 90 ? -8 : occupancyPct > 75 ? -4 : occupancyPct < 25 ? -2 : 0;
-      const etaPenalty = etaMinutes && etaMinutes > 25 ? -6 : etaMinutes && etaMinutes > 15 ? -3 : 0;
-      const base = 64;
-      const confidence = Math.max(45, Math.min(96,
-        base + freshBonus + etaBonus + stopBonus + delayPenalty + incidentPenalty + occupancyPenalty + etaPenalty
-      ));
-
-      return {
-        route: bus.route,
-        routeName: `Route ${bus.route}`,
-        stopName: bus.currentStop || 'Route in progress',
-        arrivalTime,
-        crowdPercentage: occupancyPct,
-        crowdLevel,
-        confidence,
-        factors: [
-          `Live bus: ${bus.busId}`,
-          `Passengers: ${bus.passengers}/${bus.capacity || 50}`,
-          `Status: ${bus.status}`,
-          `Last GPS update: ${bus.lastLocationAt ? new Date(bus.lastLocationAt).toLocaleTimeString() : 'unknown'} (${minsSinceUpdate ?? '?'}m ago)`,
-          `Incidents: ${incidentsCount}`,
-          `ETA source: ${etaMinutes ? 'backend' : 'regression fallback'}`
-        ]
-      };
-    });
-
-    renderResults(liveResults);
-  } catch (error) {
-    const allRoutes = ['42A', '17B', '08C', '25D', '33E'];
-    const initialResults = allRoutes.map((r) => predictWithRegression(r, 'now', null));
-    renderResults(initialResults);
-  }
+  // Use the new runPrediction logic to load default predictions using the ML backend
+  runPrediction();
 }
 
 loadLivePredictions();
 
-  // Ticker scroll
-  const tickerMessages = [
-    'Route 42A delayed +2 min at Central Station · Route 17B on time · Route 08C heavy traffic on East Ave · Route 33E ahead of schedule',
+  // ── TICKER ROTATION ──
+  let tickerMessages = [
     'Prediction accuracy today: 91% · 3,847 passengers served · System status: All green',
     'Next retraining in: 4h 32m · Model version: v2.4.1 · Data points used: 1.2M',
   ];
   let tickerIdx = 0;
+  
+  async function updateDynamicTicker() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/buses`);
+      if (response.ok) {
+        const data = await response.json();
+        const buses = data.buses || [];
+        const activeBuses = buses.filter(b => b.status && b.status.toLowerCase() !== 'off duty');
+        
+        if (activeBuses.length > 0) {
+          const alerts = activeBuses.map(b => {
+            let status = b.status.toLowerCase();
+            // Convert 'on route' to a more passenger-friendly 'on time'
+            if (status === 'on route') status = 'on time';
+            
+            let location = '';
+            if (b.currentStop) {
+              if (status === 'at stop') {
+                status = 'stopped';
+                location = ` (at ${b.currentStop})`;
+              } else {
+                location = ` (near ${b.currentStop})`;
+              }
+            } else {
+              if (status === 'at stop') {
+                status = 'waiting to start route';
+                location = ' (at terminal)';
+              } else {
+                location = ''; // Cleanly omit it instead of saying (en route)
+              }
+            }
+            
+            return `Route ${b.route} ${status}${location}`;
+          }).join('  •  ');
+          
+          tickerMessages[0] = alerts; // Overwrite the first message slot with live alerts
+        } else {
+          tickerMessages[0] = 'All fleet operations normal · No active buses at this time';
+        }
+      }
+    } catch (e) {
+      console.log('Ticker fetch failed, using fallback.');
+      tickerMessages[0] = 'Live tracking offline · Operating on scheduled estimates';
+    }
+    
+    // Update immediately after fetching
+    document.getElementById('live-ticker-text').textContent = tickerMessages[tickerIdx];
+  }
+
+  // Initial fetch
+  updateDynamicTicker();
+
+  // Rotate messages
   setInterval(() => {
     tickerIdx = (tickerIdx + 1) % tickerMessages.length;
     document.getElementById('live-ticker-text').textContent = tickerMessages[tickerIdx];
   }, 8000);
+  
+  // Refresh live alerts every 30 seconds
+  setInterval(updateDynamicTicker, 30000);
+
   const ROUTES_FROM_DB = {};
 
   function normalizeRouteCode(value) {
@@ -584,7 +582,8 @@ loadLivePredictions();
 
       const opt = document.createElement('option');
       opt.value = code;
-      opt.textContent = `${code} — ${r.name || `Route ${code}`}`;
+      const displayName = r.name && r.name.startsWith(code) ? r.name : `${code} — ${r.name || `Route ${code}`}`;
+      opt.textContent = displayName;
       sel.appendChild(opt);
     });
   }

@@ -110,7 +110,7 @@
   <button class="btn-primary" onclick="openModal('add-bus-modal')">
     + Add Bus
   </button>
-  <button class="btn-primary" onclick="openModal('add-route-modal')">
+  <button class="btn-primary" onclick="openAddRouteModal()">
     + Add Route
   </button>
   <button class="btn-teal" onclick="openModal('add-staff-modal')">
@@ -190,7 +190,7 @@
           <div class="card-icon icon-amber">🗺️</div>
           <h3>Manage Routes</h3>
         </div>
-        <button class="btn-primary" onclick="openModal('add-route-modal')">+ Add Route</button>
+        <button class="btn-primary" onclick="openAddRouteModal()">+ Add Route</button>
       </div>
       <table class="data-table">
         <thead>
@@ -222,29 +222,29 @@
         <div class="card-header">
           <div class="flex items-center gap-12">
             <div class="card-icon icon-blue">📈</div>
-            <h3>Weekly Statistics</h3>
+            <h3>Live Fleet Statistics</h3>
           </div>
         </div>
         <div class="flex-col gap-16">
           <div>
-            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Passengers (Mon–Sun)</span><span class="font-mono text-teal">24,816</span></div>
-            <div class="mini-bar"><div class="mini-bar-fill" style="width:78%;background:var(--teal);"></div></div>
+            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Passengers (Active)</span><span class="font-mono text-teal" id="live-pax-val">0</span></div>
+            <div class="mini-bar"><div class="mini-bar-fill" id="live-pax-bar" style="width:0%;background:var(--teal);"></div></div>
           </div>
           <div>
-            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">On-Time Departures</span><span class="font-mono text-amber">87%</span></div>
-            <div class="mini-bar"><div class="mini-bar-fill" style="width:87%;background:var(--amber);"></div></div>
+            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">On-Time Rate</span><span class="font-mono text-amber" id="live-ontime-val">0%</span></div>
+            <div class="mini-bar"><div class="mini-bar-fill" id="live-ontime-bar" style="width:0%;background:var(--amber);"></div></div>
           </div>
           <div>
-            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Average Occupancy</span><span class="font-mono" style="color:var(--blue)">61%</span></div>
-            <div class="mini-bar"><div class="mini-bar-fill" style="width:61%;background:var(--blue);"></div></div>
+            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Average Occupancy</span><span class="font-mono" style="color:var(--blue)" id="live-occ-val">0%</span></div>
+            <div class="mini-bar"><div class="mini-bar-fill" id="live-occ-bar" style="width:0%;background:var(--blue);"></div></div>
           </div>
           <div>
-            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Incidents Reported</span><span class="font-mono" style="color:var(--red)">4</span></div>
-            <div class="mini-bar"><div class="mini-bar-fill" style="width:8%;background:var(--red);"></div></div>
+            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Incidents Active</span><span class="font-mono" style="color:var(--red)" id="live-inc-val">0</span></div>
+            <div class="mini-bar"><div class="mini-bar-fill" id="live-inc-bar" style="width:0%;background:var(--red);"></div></div>
           </div>
           <div>
-            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Fleet Utilisation</span><span class="font-mono" style="color:#00d464">75%</span></div>
-            <div class="mini-bar"><div class="mini-bar-fill" style="width:75%;background:#00d464;"></div></div>
+            <div class="flex justify-between text-sm mb-8"><span class="text-secondary">Fleet Utilisation</span><span class="font-mono" style="color:#00d464" id="live-util-val">0%</span></div>
+            <div class="mini-bar"><div class="mini-bar-fill" id="live-util-bar" style="width:0%;background:#00d464;"></div></div>
           </div>
         </div>
       </section>
@@ -256,7 +256,7 @@
             <div class="card-icon" style="background:rgba(0,212,64,0.12);color:#00d464;">🩺</div>
             <h3>System Health</h3>
           </div>
-          <span class="badge badge-green">All Systems OK</span>
+          <span class="badge badge-green" id="health-main-badge">Checking...</span>
         </div>
         <div>
           <div class="health-item">
@@ -269,19 +269,15 @@
           </div>
           <div class="health-item">
             <span class="text-secondary text-sm">Database (MongoDB)</span>
-            <span class="badge badge-green">ONLINE</span>
+            <span class="badge badge-green" id="health-db">CHECKING</span>
           </div>
           <div class="health-item">
             <span class="text-secondary text-sm">API Server (Node.js)</span>
-            <span class="badge badge-green">ONLINE</span>
+            <span class="badge badge-green" id="health-api">CHECKING</span>
           </div>
           <div class="health-item">
-            <span class="text-secondary text-sm">Alert Service</span>
-            <span class="badge badge-amber">DEGRADED</span>
-          </div>
-          <div class="health-item">
-            <span class="text-secondary text-sm">Last Model Retrain</span>
-            <span class="font-mono text-xs" style="color:var(--text-muted)">2h ago</span>
+            <span class="text-secondary text-sm">Fleet Connectivity</span>
+            <span class="badge badge-amber" id="health-fleet">CALCULATING</span>
           </div>
         </div>
       </section>
@@ -441,10 +437,31 @@ if (currentUser) {
     pageHeader.textContent = `Welcome, ${currentUser.name}`;
   }
 }
+  let cachedRoutes = {};
+  let isEditingRoute = null;
 
-  // ── MODAL HELPERS ──
   function openModal(id)  { document.getElementById(id).classList.add('open'); }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  function openAddRouteModal() {
+    isEditingRoute = null;
+    document.getElementById('new-route-id').value = '';
+    document.getElementById('new-route-number').value = '';
+    document.getElementById('new-route-name').value = '';
+    document.getElementById('new-route-stops').value = '8';
+    document.getElementById('new-route-frequency').value = '20';
+    if (document.getElementById('new-route-stop-names')) {
+      document.getElementById('new-route-stop-names').value = '';
+    }
+    
+    const modal = document.getElementById('add-route-modal');
+    if (modal) {
+      modal.querySelector('h3').textContent = '➕ Add New Route';
+      const primaryBtn = modal.querySelector('.modal-footer .btn-primary');
+      if (primaryBtn) primaryBtn.textContent = 'Add Route';
+    }
+    openModal('add-route-modal');
+  }
 
   document.querySelectorAll('.modal-backdrop').forEach(el => {
     el.addEventListener('click', e => { 
@@ -464,8 +481,67 @@ if (currentUser) {
     const onTimeRate = activeBuses.length
       ? Math.round((onTimeBuses.length / activeBuses.length) * 100)
       : 0;
+      
+    // Occupancy
+    const totalCapacity = activeBuses.reduce((sum, b) => sum + (Number(b.capacity) || 50), 0);
+    const avgOccupancy = totalCapacity ? Math.round((totalPassengers / totalCapacity) * 100) : 0;
+    
+    // Incidents
+    const incidents = busData.reduce((sum, b) => sum + (Array.isArray(b.incidents) ? b.incidents.length : 0), 0);
 
-    return { totalPassengers, onTimeRate, activeCount: activeBuses.length };
+    return { 
+      totalPassengers, 
+      onTimeRate, 
+      activeCount: activeBuses.length, 
+      totalBuses: busData.length,
+      avgOccupancy,
+      incidents
+    };
+  }
+  
+  function updateLiveStats(stats, isOffline = false) {
+    const util = stats.totalBuses ? Math.round((stats.activeCount / stats.totalBuses) * 100) : 0;
+    
+    // Pax
+    document.getElementById('live-pax-val').textContent = stats.totalPassengers;
+    document.getElementById('live-pax-bar').style.width = Math.min(100, (stats.totalPassengers / 500) * 100) + '%';
+    
+    // On-time
+    document.getElementById('live-ontime-val').textContent = stats.onTimeRate + '%';
+    document.getElementById('live-ontime-bar').style.width = stats.onTimeRate + '%';
+    
+    // Occupancy
+    document.getElementById('live-occ-val').textContent = stats.avgOccupancy + '%';
+    document.getElementById('live-occ-bar').style.width = stats.avgOccupancy + '%';
+    
+    // Incidents
+    document.getElementById('live-inc-val').textContent = stats.incidents;
+    document.getElementById('live-inc-bar').style.width = Math.min(100, stats.incidents * 10) + '%';
+    
+    // Utilisation
+    document.getElementById('live-util-val').textContent = util + '%';
+    document.getElementById('live-util-bar').style.width = util + '%';
+    
+    // Health
+    if (isOffline) {
+      document.getElementById('health-main-badge').textContent = 'Server Offline';
+      document.getElementById('health-main-badge').className = 'badge badge-red';
+      document.getElementById('health-db').textContent = 'OFFLINE';
+      document.getElementById('health-db').className = 'badge badge-red';
+      document.getElementById('health-api').textContent = 'OFFLINE';
+      document.getElementById('health-api').className = 'badge badge-red';
+      document.getElementById('health-fleet').textContent = 'UNREACHABLE';
+      document.getElementById('health-fleet').className = 'badge badge-red';
+    } else {
+      document.getElementById('health-main-badge').textContent = 'All Systems OK';
+      document.getElementById('health-main-badge').className = 'badge badge-green';
+      document.getElementById('health-db').textContent = 'ONLINE';
+      document.getElementById('health-db').className = 'badge badge-green';
+      document.getElementById('health-api').textContent = 'ONLINE';
+      document.getElementById('health-api').className = 'badge badge-green';
+      document.getElementById('health-fleet').textContent = util > 0 ? 'GOOD' : 'NO ACTIVE BUSES';
+      document.getElementById('health-fleet').className = util > 0 ? 'badge badge-green' : 'badge badge-amber';
+    }
   }
 
   // ── LOAD BUSES FROM MONGODB ──
@@ -514,6 +590,9 @@ if (paxEl) paxEl.textContent = stats.totalPassengers.toLocaleString();
 if (onTimeEl) onTimeEl.textContent = `${stats.onTimeRate}%`;
 if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses tracked`;
 
+// Update the complex stat cards
+updateLiveStats(stats);
+
     } catch (error) {
       console.log('Backend not available. Using dummy data.');
       renderBusTable(DUMMY.buses);
@@ -527,6 +606,9 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       if (paxEl) paxEl.textContent = stats.totalPassengers.toLocaleString();
       if (onTimeEl) onTimeEl.textContent = `${stats.onTimeRate}%`;
       if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses tracked`;
+      
+      // Update the complex stat cards, passing true for isOffline
+      updateLiveStats(stats, true);
     }
   }
   
@@ -552,6 +634,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
     tbody.innerHTML = busData.map(bus => {
       const busId = bus.busId || bus.id;
+      const displayId = busId.startsWith('UNASSIGNED-') ? '<span style="color:var(--text-muted);font-style:italic;">Unassigned</span>' : busId;
       cachedBuses[busId] = bus;
       const pct        = Math.round((bus.passengers / bus.capacity) * 100);
       const crowdColor = pct > 80 ? 'var(--red)' :
@@ -565,10 +648,10 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
       return `
         <tr>
-          <td class="td-mono">${busId}</td>
+          <td class="td-mono">${displayId}</td>
           <td><span class="route-tag">${bus.route}</span></td>
           <td>${bus.driver}</td>
-          <td>
+          <td style="white-space: nowrap;">
             <span class="badge ${statusBadge}">
               ${bus.status.toUpperCase()}
             </span>
@@ -585,7 +668,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
             </div>
           </td>
           <td class="td-mono">${bus.eta}</td>
-          <td>
+          <td style="white-space: nowrap;">
             <button class="action-btn" 
                     onclick="editBus('${busId}')">Edit</button>
             <button class="action-btn danger" 
@@ -682,8 +765,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
     try {
       const token = localStorage.getItem('sbf_token');
-      const response = await fetch(`${API_BASE_URL}/routes`, {
-        method: 'POST',
+      const method = isEditingRoute ? 'PUT' : 'POST';
+      const url = isEditingRoute ? `${API_BASE_URL}/routes/${isEditingRoute}` : `${API_BASE_URL}/routes`;
+      
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -705,12 +791,13 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       }
 
       if (!response.ok) {
-        alert(data.message || 'Failed to add route.');
+        alert(data.message || `Failed to ${isEditingRoute ? 'update' : 'add'} route.`);
         return;
       }
 
       closeModal('add-route-modal');
-      alert(`✅ Route ${routeId} added successfully.`);
+      alert(`✅ Route ${routeId} ${isEditingRoute ? 'updated' : 'added'} successfully.`);
+      isEditingRoute = null;
       loadRoutesFromDB();
     } catch (error) {
       alert('Backend not available. Cannot add route.');
@@ -763,6 +850,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       }
       if (!response.ok) throw new Error(data.message || 'Routes load failed');
 
+      cachedRoutes = {};
+      (data.routes || []).forEach(r => {
+        cachedRoutes[r.routeId] = r;
+      });
+
       renderRouteTable(data.routes || []);
       populateBusRouteDropdown(data.routes || []);
       const totalRoutesEl = document.getElementById('total-routes');
@@ -801,7 +893,10 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
     sel.innerHTML = list.length
       ? list
-          .map((r) => `<option value="${r.code}">${r.code} — ${r.name || `Route ${r.code}`}</option>`)
+          .map((r) => {
+            const displayName = r.name.startsWith(r.code) ? r.name : `${r.code} — ${r.name || `Route ${r.code}`}`;
+            return `<option value="${r.code}">${displayName}</option>`;
+          })
           .join('')
       : '<option value="">No routes found</option>';
 
@@ -841,10 +936,49 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
           <td class="td-mono">${route.frequency || '—'}</td>
           <td><span class="badge ${statusBadge}">${status.toUpperCase()}</span></td>
           <td>
+            <button class="action-btn" onclick="editRoute('${route.routeId}')">Edit</button>
             <button class="action-btn danger" onclick="deleteRoute('${route.routeId}')">Delete</button>
           </td>
         </tr>`;
     }).join('');
+  }
+  
+  function editRoute(routeId) {
+    const route = cachedRoutes[routeId];
+    if (!route) return;
+    
+    isEditingRoute = routeId;
+    document.getElementById('new-route-id').value = route.routeId;
+    
+    // Parse route name and number (assuming "Number — Name")
+    const parts = (route.name || '').split('—').map(s => s.trim());
+    if (parts.length > 1) {
+      document.getElementById('new-route-number').value = parts[0];
+      document.getElementById('new-route-name').value = parts.slice(1).join(' — ');
+    } else {
+      document.getElementById('new-route-number').value = route.routeId.replace('RT-', '');
+      document.getElementById('new-route-name').value = route.name || '';
+    }
+    
+    document.getElementById('new-route-stops').value = route.totalStops || (route.stops ? route.stops.length : 8);
+    document.getElementById('new-route-frequency').value = parseInt(route.frequency, 10) || 20;
+    
+    if (route.stops && Array.isArray(route.stops)) {
+      const stopNamesEl = document.getElementById('new-route-stop-names');
+      if (stopNamesEl) {
+        stopNamesEl.value = route.stops.map(s => s.name).join('\n');
+      }
+    }
+    
+    // Change modal title and button text
+    const modal = document.getElementById('add-route-modal');
+    if (modal) {
+      modal.querySelector('h3').textContent = '✏️ Edit Route';
+      const primaryBtn = modal.querySelector('.modal-footer .btn-primary');
+      if (primaryBtn) primaryBtn.textContent = 'Save Changes';
+    }
+    
+    openModal('add-route-modal');
   }
 
   async function deleteRoute(routeId) {
@@ -878,7 +1012,13 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
   // ── DELETE BUS FROM MONGODB ──
   async function deleteBus(busId) {
-    if (!confirm(`Remove Bus ${busId} from fleet?`)) return;
+    const bus = cachedBuses[busId];
+    
+    if (busId.startsWith('UNASSIGNED-')) {
+      if (!confirm(`Are you sure you want to completely delete the driver account for '${bus.driver}'?`)) return;
+    } else {
+      if (!confirm(`Remove Bus ${busId} from fleet?`)) return;
+    }
 
     try {
       const token    = localStorage.getItem('sbf_token');
@@ -915,6 +1055,11 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
     const bus = cachedBuses[busId];
     if (!bus) {
       alert('Bus data not found. Please refresh.');
+      return;
+    }
+
+    if (busId.startsWith('UNASSIGNED-')) {
+      alert('This is an unassigned driver, not a real bus. Please use the "+ Add Bus" button to assign this driver to a real bus ID and route.');
       return;
     }
 
@@ -999,6 +1144,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
 
       closeModal('add-staff-modal');
       alert(`✅ ${role.toUpperCase()} account created for ${name}.`);
+      if (role === 'driver') loadBusesFromDB();
 
     } catch (error) {
       // Fallback to localStorage
@@ -1015,6 +1161,7 @@ if (onTimeDeltaEl) onTimeDeltaEl.textContent = `▲ ${stats.activeCount} buses t
       localStorage.setItem('sbf_registered_' + email, JSON.stringify(staffUser));
       closeModal('add-staff-modal');
       alert(`✅ ${role.toUpperCase()} account created for ${name}.`);
+      if (role === 'driver') loadBusesFromDB();
     }
   }
 
