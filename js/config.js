@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://smart-bus-backend-pz4u.onrender.com/api';
 
 // Helper function to get auth header
 function getAuthHeader() {
